@@ -1,3 +1,3 @@
 - [x] Bring in the supplied security workspace and its working navigation.
 - [x] Build a dense single-page command center with space-purple and black styling.
-- [ ] Verify the dashboard on desktop and mobile, including search and triage.
+- [x] Verify the dashboard on desktop and mobile, including search and triage.
