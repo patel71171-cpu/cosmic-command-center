@@ -10,33 +10,271 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AiCopilotRouteImport } from './routes/ai-copilot'
+import { Route as AssessmentsRouteImport } from './routes/assessments'
+import { Route as AttackSurfaceRouteImport } from './routes/attack-surface'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as FindingsRouteImport } from './routes/findings'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PostureRouteImport } from './routes/posture'
+import { Route as RemediationRouteImport } from './routes/remediation'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as RiskGraphRouteImport } from './routes/risk-graph'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as AssessmentsIndexRouteImport } from './routes/assessments.index'
+import { Route as AssessmentsIdRouteImport } from './routes/assessments.$id'
+import { Route as AssessmentsNewRouteImport } from './routes/assessments.new'
+import { Route as EvidenceIdRouteImport } from './routes/evidence.$id'
+import { Route as FindingsIndexRouteImport } from './routes/findings.index'
+import { Route as FindingsIdRouteImport } from './routes/findings.$id'
+import { Route as ReportsIndexRouteImport } from './routes/reports.index'
+import { Route as ReportsIdRouteImport } from './routes/reports.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AiCopilotRoute = AiCopilotRouteImport.update({
+  id: '/ai-copilot',
+  path: '/ai-copilot',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssessmentsRoute = AssessmentsRouteImport.update({
+  id: '/assessments',
+  path: '/assessments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AttackSurfaceRoute = AttackSurfaceRouteImport.update({
+  id: '/attack-surface',
+  path: '/attack-surface',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FindingsRoute = FindingsRouteImport.update({
+  id: '/findings',
+  path: '/findings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PostureRoute = PostureRouteImport.update({
+  id: '/posture',
+  path: '/posture',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RemediationRoute = RemediationRouteImport.update({
+  id: '/remediation',
+  path: '/remediation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RiskGraphRoute = RiskGraphRouteImport.update({
+  id: '/risk-graph',
+  path: '/risk-graph',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssessmentsIndexRoute = AssessmentsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AssessmentsRoute,
+} as any)
+const AssessmentsIdRoute = AssessmentsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AssessmentsRoute,
+} as any)
+const AssessmentsNewRoute = AssessmentsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AssessmentsRoute,
+} as any)
+const EvidenceIdRoute = EvidenceIdRouteImport.update({
+  id: '/evidence/$id',
+  path: '/evidence/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FindingsIndexRoute = FindingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => FindingsRoute,
+} as any)
+const FindingsIdRoute = FindingsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => FindingsRoute,
+} as any)
+const ReportsIndexRoute = ReportsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ReportsRoute,
+} as any)
+const ReportsIdRoute = ReportsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ReportsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ai-copilot': typeof AiCopilotRoute
+  '/assessments': typeof AssessmentsRouteWithChildren
+  '/attack-surface': typeof AttackSurfaceRoute
+  '/dashboard': typeof DashboardRoute
+  '/findings': typeof FindingsRouteWithChildren
+  '/login': typeof LoginRoute
+  '/posture': typeof PostureRoute
+  '/remediation': typeof RemediationRoute
+  '/reports': typeof ReportsRouteWithChildren
+  '/risk-graph': typeof RiskGraphRoute
+  '/settings': typeof SettingsRoute
+  '/assessments/$id': typeof AssessmentsIdRoute
+  '/assessments/new': typeof AssessmentsNewRoute
+  '/evidence/$id': typeof EvidenceIdRoute
+  '/findings/$id': typeof FindingsIdRoute
+  '/reports/$id': typeof ReportsIdRoute
+  '/assessments/': typeof AssessmentsIndexRoute
+  '/findings/': typeof FindingsIndexRoute
+  '/reports/': typeof ReportsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ai-copilot': typeof AiCopilotRoute
+  '/attack-surface': typeof AttackSurfaceRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/posture': typeof PostureRoute
+  '/remediation': typeof RemediationRoute
+  '/risk-graph': typeof RiskGraphRoute
+  '/settings': typeof SettingsRoute
+  '/assessments/$id': typeof AssessmentsIdRoute
+  '/assessments/new': typeof AssessmentsNewRoute
+  '/evidence/$id': typeof EvidenceIdRoute
+  '/findings/$id': typeof FindingsIdRoute
+  '/reports/$id': typeof ReportsIdRoute
+  '/assessments': typeof AssessmentsIndexRoute
+  '/findings': typeof FindingsIndexRoute
+  '/reports': typeof ReportsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ai-copilot': typeof AiCopilotRoute
+  '/assessments': typeof AssessmentsRouteWithChildren
+  '/attack-surface': typeof AttackSurfaceRoute
+  '/dashboard': typeof DashboardRoute
+  '/findings': typeof FindingsRouteWithChildren
+  '/login': typeof LoginRoute
+  '/posture': typeof PostureRoute
+  '/remediation': typeof RemediationRoute
+  '/reports': typeof ReportsRouteWithChildren
+  '/risk-graph': typeof RiskGraphRoute
+  '/settings': typeof SettingsRoute
+  '/assessments/$id': typeof AssessmentsIdRoute
+  '/assessments/new': typeof AssessmentsNewRoute
+  '/evidence/$id': typeof EvidenceIdRoute
+  '/findings/$id': typeof FindingsIdRoute
+  '/reports/$id': typeof ReportsIdRoute
+  '/assessments/': typeof AssessmentsIndexRoute
+  '/findings/': typeof FindingsIndexRoute
+  '/reports/': typeof ReportsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/ai-copilot'
+    | '/assessments'
+    | '/attack-surface'
+    | '/dashboard'
+    | '/findings'
+    | '/login'
+    | '/posture'
+    | '/remediation'
+    | '/reports'
+    | '/risk-graph'
+    | '/settings'
+    | '/assessments/$id'
+    | '/assessments/new'
+    | '/evidence/$id'
+    | '/findings/$id'
+    | '/reports/$id'
+    | '/assessments/'
+    | '/findings/'
+    | '/reports/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/ai-copilot'
+    | '/attack-surface'
+    | '/dashboard'
+    | '/login'
+    | '/posture'
+    | '/remediation'
+    | '/risk-graph'
+    | '/settings'
+    | '/assessments/$id'
+    | '/assessments/new'
+    | '/evidence/$id'
+    | '/findings/$id'
+    | '/reports/$id'
+    | '/assessments'
+    | '/findings'
+    | '/reports'
+  id:
+    | '__root__'
+    | '/'
+    | '/ai-copilot'
+    | '/assessments'
+    | '/attack-surface'
+    | '/dashboard'
+    | '/findings'
+    | '/login'
+    | '/posture'
+    | '/remediation'
+    | '/reports'
+    | '/risk-graph'
+    | '/settings'
+    | '/assessments/$id'
+    | '/assessments/new'
+    | '/evidence/$id'
+    | '/findings/$id'
+    | '/reports/$id'
+    | '/assessments/'
+    | '/findings/'
+    | '/reports/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AiCopilotRoute: typeof AiCopilotRoute
+  AssessmentsRoute: typeof AssessmentsRouteWithChildren
+  AttackSurfaceRoute: typeof AttackSurfaceRoute
+  DashboardRoute: typeof DashboardRoute
+  FindingsRoute: typeof FindingsRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  PostureRoute: typeof PostureRoute
+  RemediationRoute: typeof RemediationRoute
+  ReportsRoute: typeof ReportsRouteWithChildren
+  RiskGraphRoute: typeof RiskGraphRoute
+  SettingsRoute: typeof SettingsRoute
+  EvidenceIdRoute: typeof EvidenceIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +286,199 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ai-copilot': {
+      id: '/ai-copilot'
+      path: '/ai-copilot'
+      fullPath: '/ai-copilot'
+      preLoaderRoute: typeof AiCopilotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assessments': {
+      id: '/assessments'
+      path: '/assessments'
+      fullPath: '/assessments'
+      preLoaderRoute: typeof AssessmentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/attack-surface': {
+      id: '/attack-surface'
+      path: '/attack-surface'
+      fullPath: '/attack-surface'
+      preLoaderRoute: typeof AttackSurfaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/findings': {
+      id: '/findings'
+      path: '/findings'
+      fullPath: '/findings'
+      preLoaderRoute: typeof FindingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/posture': {
+      id: '/posture'
+      path: '/posture'
+      fullPath: '/posture'
+      preLoaderRoute: typeof PostureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/remediation': {
+      id: '/remediation'
+      path: '/remediation'
+      fullPath: '/remediation'
+      preLoaderRoute: typeof RemediationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/risk-graph': {
+      id: '/risk-graph'
+      path: '/risk-graph'
+      fullPath: '/risk-graph'
+      preLoaderRoute: typeof RiskGraphRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assessments/': {
+      id: '/assessments/'
+      path: '/'
+      fullPath: '/assessments/'
+      preLoaderRoute: typeof AssessmentsIndexRouteImport
+      parentRoute: typeof AssessmentsRoute
+    }
+    '/assessments/$id': {
+      id: '/assessments/$id'
+      path: '/$id'
+      fullPath: '/assessments/$id'
+      preLoaderRoute: typeof AssessmentsIdRouteImport
+      parentRoute: typeof AssessmentsRoute
+    }
+    '/assessments/new': {
+      id: '/assessments/new'
+      path: '/new'
+      fullPath: '/assessments/new'
+      preLoaderRoute: typeof AssessmentsNewRouteImport
+      parentRoute: typeof AssessmentsRoute
+    }
+    '/evidence/$id': {
+      id: '/evidence/$id'
+      path: '/evidence/$id'
+      fullPath: '/evidence/$id'
+      preLoaderRoute: typeof EvidenceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/findings/': {
+      id: '/findings/'
+      path: '/'
+      fullPath: '/findings/'
+      preLoaderRoute: typeof FindingsIndexRouteImport
+      parentRoute: typeof FindingsRoute
+    }
+    '/findings/$id': {
+      id: '/findings/$id'
+      path: '/$id'
+      fullPath: '/findings/$id'
+      preLoaderRoute: typeof FindingsIdRouteImport
+      parentRoute: typeof FindingsRoute
+    }
+    '/reports/': {
+      id: '/reports/'
+      path: '/'
+      fullPath: '/reports/'
+      preLoaderRoute: typeof ReportsIndexRouteImport
+      parentRoute: typeof ReportsRoute
+    }
+    '/reports/$id': {
+      id: '/reports/$id'
+      path: '/$id'
+      fullPath: '/reports/$id'
+      preLoaderRoute: typeof ReportsIdRouteImport
+      parentRoute: typeof ReportsRoute
+    }
   }
 }
 
+interface AssessmentsRouteChildren {
+  AssessmentsIdRoute: typeof AssessmentsIdRoute
+  AssessmentsNewRoute: typeof AssessmentsNewRoute
+  AssessmentsIndexRoute: typeof AssessmentsIndexRoute
+}
+
+const AssessmentsRouteChildren: AssessmentsRouteChildren = {
+  AssessmentsIdRoute: AssessmentsIdRoute,
+  AssessmentsNewRoute: AssessmentsNewRoute,
+  AssessmentsIndexRoute: AssessmentsIndexRoute,
+}
+
+const AssessmentsRouteWithChildren = AssessmentsRoute._addFileChildren(
+  AssessmentsRouteChildren,
+)
+
+interface FindingsRouteChildren {
+  FindingsIdRoute: typeof FindingsIdRoute
+  FindingsIndexRoute: typeof FindingsIndexRoute
+}
+
+const FindingsRouteChildren: FindingsRouteChildren = {
+  FindingsIdRoute: FindingsIdRoute,
+  FindingsIndexRoute: FindingsIndexRoute,
+}
+
+const FindingsRouteWithChildren = FindingsRoute._addFileChildren(
+  FindingsRouteChildren,
+)
+
+interface ReportsRouteChildren {
+  ReportsIdRoute: typeof ReportsIdRoute
+  ReportsIndexRoute: typeof ReportsIndexRoute
+}
+
+const ReportsRouteChildren: ReportsRouteChildren = {
+  ReportsIdRoute: ReportsIdRoute,
+  ReportsIndexRoute: ReportsIndexRoute,
+}
+
+const ReportsRouteWithChildren =
+  ReportsRoute._addFileChildren(ReportsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AiCopilotRoute: AiCopilotRoute,
+  AssessmentsRoute: AssessmentsRouteWithChildren,
+  AttackSurfaceRoute: AttackSurfaceRoute,
+  DashboardRoute: DashboardRoute,
+  FindingsRoute: FindingsRouteWithChildren,
+  LoginRoute: LoginRoute,
+  PostureRoute: PostureRoute,
+  RemediationRoute: RemediationRoute,
+  ReportsRoute: ReportsRouteWithChildren,
+  RiskGraphRoute: RiskGraphRoute,
+  SettingsRoute: SettingsRoute,
+  EvidenceIdRoute: EvidenceIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
