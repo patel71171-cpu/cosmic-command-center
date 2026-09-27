@@ -12,7 +12,7 @@ const severityTones: Record<Severity, string> = { Critical: 'critical', High: 'h
 const severityOrder: Severity[] = ['Critical', 'High', 'Medium', 'Low'];
 const css = (name: string) => `var(--${name})`;
 const chartTooltip = { contentStyle: { background: css('panel'), border: `1px solid ${css('border')}`, borderRadius: 6, color: css('foreground'), fontSize: 11 }, itemStyle: { color: css('foreground') } };
-const fullTrend = trend.map((item, index) => ({ ...item, traffic: 320 + index * 26 + [24, -9, 33, -18, 12, -24, 38, -6][index], threats: 64 - index * 5 + (index % 2) * 6 }));
+const fullTrend = trend.map((item, index) => ({ ...item, traffic: 320 + index * 26 + ([24, -9, 33, -18, 12, -24, 38, -6][index] ?? 0), threats: 64 - index * 5 + (index % 2) * 6 }));
 
 function Panel({ title, note, action, children, className = '' }: { title: string; note?: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return <section className={`command-panel min-w-0 ${className}`}><div className="flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 py-3"><div className="min-w-0"><h2 className="truncate text-[12px] font-semibold text-foreground">{title}</h2>{note && <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{note}</p>}</div>{action}</div><div className="p-4">{children}</div></section>;
