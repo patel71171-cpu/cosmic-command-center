@@ -22,3 +22,38 @@
 @media (max-width: 1200px) { .dashboard-grid-top { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 760px) { .dashboard-grid-top,.dashboard-grid-bottom { grid-template-columns: minmax(0,1fr); } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+@keyframes moveGrid {
+  0% { transform: perspective(600px) rotateX(60deg) translateY(0); }
+  100% { transform: perspective(600px) rotateX(60deg) translateY(40px); }
+}
+
+.cosmic-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% -20%, color-mix(in oklab, var(--primary) 15%, transparent), transparent 60%),
+              radial-gradient(circle at 80% 120%, color-mix(in oklab, var(--violet) 15%, transparent), transparent 50%);
+  overflow: hidden;
+}
+
+.cosmic-bg::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background-image: 
+    linear-gradient(to right, color-mix(in oklab, var(--primary) 20%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--primary) 20%, transparent) 1px, transparent 1px);
+  background-size: 40px 40px;
+  transform-origin: bottom center;
+  animation: moveGrid 2s linear infinite;
+  mask-image: linear-gradient(to top, black 10%, transparent 50%);
+  -webkit-mask-image: linear-gradient(to top, black 10%, transparent 50%);
+}
