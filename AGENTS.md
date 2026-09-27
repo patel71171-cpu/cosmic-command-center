@@ -8,3 +8,6 @@
 > Commits you push to the connected branch sync back to  and show up in
 > the editor, so keep the branch in a working state.
 <!-- :END -->
+
+- SENTINEL uses the uploaded assessment workspace as its demo-data foundation; this preserves working security workflows without claiming live telemetry.
+- The command-center overview is isolated in `sentinel-overview.tsx` while detailed workflows retain their file routes; this keeps the one-page view focused and detail actions navigable.

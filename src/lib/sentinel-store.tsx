@@ -1,0 +1,6 @@
+import { createContext,useContext,useState,type ReactNode } from 'react';
+import { assessments,findings,type Assessment,type Finding } from './sentinel-data';
+type Store={findings:Finding[];assessments:Assessment[];updateFinding:(id:string,patch:Partial<Finding>)=>void;addAssessment:(a:Assessment)=>void;notify:(message:string)=>void;message:string;selectedAssessment:string;setSelectedAssessment:(id:string)=>void};
+const Context=createContext<Store|null>(null);
+export function SentinelProvider({children}:{children:ReactNode}){const [allFindings,setFindings]=useState(findings);const [allAssessments,setAssessments]=useState(assessments);const [message,setMessage]=useState('');const [selectedAssessment,setSelectedAssessment]=useState('world-monitor');const notify=(text:string)=>{setMessage(text);setTimeout(()=>setMessage(''),4000)};return <Context.Provider value={{findings:allFindings,assessments:allAssessments,updateFinding:(id,patch)=>setFindings(items=>items.map(f=>f.id===id?{...f,...patch}:f)),addAssessment:a=>setAssessments(items=>[a,...items]),notify,message,selectedAssessment,setSelectedAssessment}}>{children}</Context.Provider>}
+export function useSentinel(){const value=useContext(Context);if(!value)throw new Error('SENTINEL context missing');return value}
