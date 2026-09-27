@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -27,16 +27,7 @@ import {
   Filter as FilterIcon,
 } from "lucide-react";
 import { useSentinel } from "@/lib/sentinel-store";
-import {
-  findings as seedFindings,
-  assessments as seedAssessments,
-  evidence,
-  assets,
-  categories,
-  severityData,
-  type Finding,
-  type Assessment,
-} from "@/lib/sentinel-data";
+import { type Finding, type Assessment } from "@/lib/sentinel-data";
 import {
   Badge,
   PageHeading,
@@ -452,7 +443,8 @@ export function NewAssessment() {
       findings: 0,
       score: 0,
       progress: status === "Running" ? 8 : 0,
-      lastRun: "27 Sep 2026",
+      lastRun: status === "Running" ? "Running (8%)" : "Scheduled",
+      logs: status === "Running" ? [`${new Date().toLocaleTimeString('en-GB')} · Assessment initialized`] : []
     });
     notify(
       status === "Running"
@@ -784,15 +776,11 @@ export function AssessmentDetail({ id }: { id: string }) {
           </Panel>
           <Panel title="Processing Log">
             <div className="space-y-3 font-mono text-[11px] text-muted-foreground">
-              {[
-                "09:42:15 · Risk calculation completed",
-                "09:42:12 · Finding FND-001 correlated",
-                "09:42:11 · Evidence chain EV-1042 captured",
-                "09:41:32 · 132 endpoints indexed",
-                "09:40:03 · Scope validation passed",
-              ].map((x) => (
-                <div key={x}>{x}</div>
-              ))}
+              {a.logs && a.logs.length > 0 ? a.logs.map((x, i) => (
+                <div key={i}>{x}</div>
+              )) : (
+                <div>No logs generated yet.</div>
+              )}
             </div>
           </Panel>
           <Panel title="Next Step">
@@ -842,7 +830,7 @@ export function RiskGraph() {
   );
 }
 export function Findings() {
-  const { findings } = useSentinel();
+  const { findings, severityData } = useSentinel();
   const [q, setQ] = useState(""),
     [severity, setSeverity] = useState("All"),
     [category, setCategory] = useState("All"),
@@ -992,7 +980,7 @@ export function Findings() {
   );
 }
 export function FindingDetail({ id }: { id: string }) {
-  const { findings, updateFinding, notify } = useSentinel();
+  const { findings, updateFinding, notify, evidence } = useSentinel();
   const f = findings.find((x) => x.id === id);
   const navigate = useNavigate();
   const [assign, setAssign] = useState(false),
@@ -1239,7 +1227,7 @@ export function EvidenceViewer({ id }: { id: string }) {
   const [activeId, setActiveId] = useState(id),
     [compare, setCompare] = useState(false),
     [expanded, setExpanded] = useState(false);
-  const { notify } = useSentinel();
+  const { notify, evidence, findings } = useSentinel();
   const item = evidence.find((e) => e.id === activeId);
   if (!item) return <Empty text="Evidence not found" />;
   const related = evidence.filter((e) => e.finding === item.finding);
@@ -1331,11 +1319,11 @@ export function EvidenceViewer({ id }: { id: string }) {
           </Panel>
           <Panel title="Related Finding">
             <div className="text-sm font-medium">
-              {seedFindings.find((f) => f.id === item.finding)?.title}
+              {findings.find((f) => f.id === item.finding)?.title}
             </div>
             <div className="mt-2">
-              <Badge tone={seedFindings.find((f) => f.id === item.finding)?.severity ?? "Informational"}>
-                {seedFindings.find((f) => f.id === item.finding)?.severity}
+              <Badge tone={findings.find((f) => f.id === item.finding)?.severity ?? "Informational"}>
+                {findings.find((f) => f.id === item.finding)?.severity}
               </Badge>
             </div>
             <div className="mt-5">
@@ -1737,7 +1725,7 @@ export function Reports() {
   );
 }
 export function ReportDetail({ id }: { id: string }) {
-  const { notify } = useSentinel();
+  const { notify, findings } = useSentinel();
   const title =
     reportTypes[["executive", "technical", "remediation", "summary"].indexOf(id)] || "Executive Security Report";
   return (
@@ -1753,7 +1741,7 @@ export function ReportDetail({ id }: { id: string }) {
               onClick={() =>
                 exportText(
                   `sentinel-${id}-report.txt`,
-                  `${title}\nWorld Monitor Security Assessment\nScore: 72/100\nCritical: 3 | High: 12 | Medium: 18\n\n${seedFindings.map((f) => `${f.id}: ${f.title} — ${f.severity}\n${f.summary}`).join("\n\n")}`,
+                  `${title}\nWorld Monitor Security Assessment\nScore: 72/100\nCritical: 3 | High: 12 | Medium: 18\n\n${findings.map((f) => `${f.id}: ${f.title} — ${f.severity}\n${f.summary}`).join("\n\n")}`,
                 )
               }
             >
@@ -1847,13 +1835,34 @@ export function ReportDetail({ id }: { id: string }) {
   );
 }
 export function Copilot() {
+  const { findings } = useSentinel();
   const [text, setText] = useState(""),
     [messages, setMessages] = useState<{ who: string; text: string }[]>([
       {
         who: "assistant",
-        text: "I can help explain the World Monitor assessment. Responses here are simulated suggestions based on the demo findings.",
+        text: "Hi! I'm Copilot, your AI security assistant. I'm connected to your local Ollama instance and can answer questions about the World Monitor assessment findings.",
       },
-    ]);
+    ]),
+    [loading, setLoading] = useState(false),
+    [ollamaModel, setOllamaModel] = useState("llama3"),
+    [ollamaStatus, setOllamaStatus] = useState<"unknown" | "ok" | "error">("unknown");
+
+  // Check Ollama availability on mount
+  useEffect(() => {
+    fetch("http://localhost:11434/api/tags")
+      .then((r) => r.json())
+      .then((data) => {
+        const models: string[] = (data.models || []).map((m: any) => m.name);
+        if (models.length > 0) {
+          setOllamaModel(models[0]);
+          setOllamaStatus("ok");
+        } else {
+          setOllamaStatus("error");
+        }
+      })
+      .catch(() => setOllamaStatus("error"));
+  }, []);
+
   const prompts = [
     "Explain this vulnerability in simple terms",
     "Why is this finding high risk?",
@@ -1862,23 +1871,84 @@ export function Copilot() {
     "Compare this finding with previous assessments",
     "What should we verify during re-test?",
   ];
-  const send = (prompt: string) => {
-    if (!prompt.trim()) return;
-    const p = prompt.toLowerCase();
-    const reply = p.includes("evidence")
-      ? "Three redacted artifacts document the authorization gap: an analyst-level request, an HTTP 200 response exposing administrative records, and repeatable validation output."
-      : p.includes("remediation") || p.includes("fix")
-        ? "Suggested approach: enforce server-side role checks on all administrative routes, add negative authorization tests, deploy the change, then verify with a non-admin account."
-        : p.includes("re-test")
-          ? "During re-test, confirm the same non-admin request now returns 403, verify no sensitive fields are returned, and check that authorized admin access still works."
-          : p.includes("previous")
-            ? "The simulated baseline score was 54, compared with 82 after remediation. Critical findings decreased from 6 to 1."
-            : p.includes("high risk")
-              ? "The administrative endpoint exposes sensitive records to a lower-privilege account. This creates a direct access-control failure with potentially broad data impact."
-              : "In simple terms, an ordinary signed-in user can reach an admin-only endpoint. The linked HTTP evidence shows the server returned user records instead of denying access.";
-    setMessages((v) => [...v, { who: "user", text: prompt }, { who: "assistant", text: reply }]);
-    setText("");
+
+  const buildContext = () => {
+    const topFindings = findings.slice(0, 5).map(f =>
+      `- ${f.id}: ${f.title} (${f.severity}, CVSS ${f.cvss}, status: ${f.status}, asset: ${f.asset})`
+    ).join("\n");
+    return `Current assessment: World Monitor Security Assessment.\nTop findings:\n${topFindings}`;
   };
+
+  const send = async (prompt: string) => {
+    if (!prompt.trim() || loading) return;
+    setText("");
+    setLoading(true);
+
+    const userMsg = { who: "user", text: prompt };
+    const assistantMsg = { who: "assistant", text: "" };
+    setMessages((v) => [...v, userMsg, assistantMsg]);
+
+    const systemPrompt = `Your name is Copilot. You are a helpful AI security analyst assistant embedded in SENTINEL, a security assessment platform. ${buildContext()} Always be concise, technical where appropriate, and helpful.`;
+
+    try {
+      const response = await fetch("http://localhost:11434/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: ollamaModel,
+          stream: true,
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...messages.filter(m => m.who !== "assistant" || m.text).map(m => ({
+              role: m.who === "user" ? "user" : "assistant",
+              content: m.text,
+            })),
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+
+      if (!response.ok || !response.body) throw new Error("Ollama error");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        for (const line of chunk.split("\n")) {
+          if (!line.trim()) continue;
+          try {
+            const json = JSON.parse(line);
+            const token: string = json.message?.content || "";
+            if (token) {
+              setMessages((v) => {
+                const copy = [...v];
+                copy[copy.length - 1] = {
+                  ...copy[copy.length - 1],
+                  text: copy[copy.length - 1].text + token,
+                };
+                return copy;
+              });
+            }
+          } catch {}
+        }
+      }
+    } catch {
+      setMessages((v) => {
+        const copy = [...v];
+        copy[copy.length - 1] = {
+          ...copy[copy.length - 1],
+          text: "⚠️ Could not connect to Ollama. Make sure Ollama is running locally on port 11434 and a model is pulled (e.g. `ollama run llama3`).",
+        };
+        return copy;
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <PageHeading
@@ -1888,11 +1958,30 @@ export function Copilot() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_285px]">
         <div className="panel flex min-h-[590px] flex-col">
           <div className="border-b border-border p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Sparkles size={17} className="text-primary" /> Assessment conversation
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Sparkles size={17} className="text-primary" /> Assessment conversation
+              </div>
+              <div className="flex items-center gap-2">
+                {ollamaStatus === "ok" && (
+                  <span className="flex items-center gap-1.5 rounded border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">
+                    <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                    Ollama · {ollamaModel}
+                  </span>
+                )}
+                {ollamaStatus === "error" && (
+                  <span className="flex items-center gap-1.5 rounded border border-critical/30 bg-critical/10 px-2 py-0.5 text-[10px] font-semibold text-critical">
+                    <span className="h-1.5 w-1.5 rounded-full bg-critical" />
+                    Ollama offline
+                  </span>
+                )}
+                {ollamaStatus === "unknown" && (
+                  <span className="text-[10px] text-muted-foreground">Connecting…</span>
+                )}
+              </div>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Simulated suggestions · verify against linked evidence before acting
+              Powered by Ollama — responses are generated by your local model
             </p>
           </div>
           <div className="scrollbar flex-1 space-y-4 overflow-y-auto p-5">
@@ -1902,9 +1991,18 @@ export function Copilot() {
                 className={`max-w-[85%] rounded-md border p-4 text-xs leading-6 ${m.who === "user" ? "ml-auto border-primary/25 bg-accent" : "border-border bg-secondary"}`}
               >
                 {m.who === "assistant" && (
-                  <div className="eyebrow mb-2 text-primary">SIMULATED AI SUGGESTION</div>
+                  <div className="eyebrow mb-2 text-primary">COPILOT</div>
                 )}
-                {m.text}
+                {m.text || (loading && i === messages.length - 1 ? (
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <span className="inline-flex gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" style={{ animationDelay: "0ms" }} />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" style={{ animationDelay: "150ms" }} />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" style={{ animationDelay: "300ms" }} />
+                    </span>
+                    Thinking…
+                  </span>
+                ) : "")}
               </div>
             ))}
           </div>
@@ -1932,11 +2030,12 @@ export function Copilot() {
               <Input
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Ask about this assessment..."
+                placeholder={loading ? "Copilot is thinking…" : "Ask Copilot about this assessment…"}
+                disabled={loading}
                 className="border-border bg-secondary text-xs"
               />
-              <Button type="submit" size="sm">
-                Send
+              <Button type="submit" size="sm" disabled={loading || !text.trim()}>
+                {loading ? "…" : "Send"}
               </Button>
             </form>
           </div>
@@ -1983,7 +2082,7 @@ export function Copilot() {
   );
 }
 export function SettingsPage() {
-  const { notify } = useSentinel();
+  const { notify, userName, setUserName } = useSentinel();
   const [alerts, setAlerts] = useState(true),
     [digest, setDigest] = useState(true),
     [ai, setAi] = useState(true);
@@ -1996,7 +2095,7 @@ export function SettingsPage() {
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel title="Profile">
           <div className="space-y-4">
-            <Field label="Name" value="Alex Morgan" set={() => {}} placeholder="Name" />
+            <Field label="Name" value={userName} set={setUserName} placeholder="Name" />
             <Field label="Role" value="Security Analyst" set={() => {}} placeholder="Role" />
             <div className="text-xs text-muted-foreground">
               Demo profile · no account data is stored.

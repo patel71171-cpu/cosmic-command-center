@@ -1,12 +1,13 @@
-import { createFileRoute, redirect } from '@tanstack/react-router';
-export const Route = createFileRoute('/')({
+import { createFileRoute } from "@tanstack/react-router";
+import { CommandDashboard } from "@/components/command-dashboard";
+export const Route = createFileRoute("/")({
   head: () => ({ meta: [
-    { title: 'SENTINEL — Security Command Center' },
-    { name: 'description', content: 'Explore the SENTINEL security operations command center.' },
-    { property: 'og:title', content: 'SENTINEL — Security Command Center' },
-    { property: 'og:description', content: 'Explore the SENTINEL security operations command center.' },
-    { property: 'og:type', content: 'website' },
-    { name: 'twitter:card', content: 'summary_large_image' },
+    { title: "Security Command Center — SENTINEL" },
+    { name: "description", content: "Monitor security posture, findings, assets, and assessments in one command center." },
+    { property: "og:title", content: "Security Command Center — SENTINEL" },
+    { property: "og:description", content: "Monitor security posture, findings, assets, and assessments in one command center." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary_large_image" },
   ] }),
-  beforeLoad: () => { throw redirect({ to: '/dashboard' }); },
+  component: CommandDashboard,
 });

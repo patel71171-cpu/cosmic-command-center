@@ -10,8 +10,8 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportError } from "../lib/-error-reporting";
 import { SentinelShell } from "../components/sentinel-shell";
+import { reportError } from "../lib/-error-reporting";
 
 function NotFoundComponent() {
   return (
@@ -78,12 +78,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "SENTINEL — Security Assessment Platform" },
-      { name: "description", content: "Evidence-driven security assessment and remediation." },
-      { property: "og:title", content: "SENTINEL — Security Assessment Platform" },
-      { property: "og:description", content: "Evidence-driven security assessment and remediation." },
+      { title: "SENTINEL — Security Command Center" },
+      { name: "description", content: "A unified view of findings, assets, exposure, and security operations." },
+      { name: "author", content: "" },
+      { property: "og:title", content: "SENTINEL — Security Command Center" },
+      { property: "og:description", content: "A unified view of findings, assets, exposure, and security operations." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:site", content: "@" },
     ],
     links: [
       {
@@ -93,7 +95,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" },
     ],
   }),
   shellComponent: RootShell,
@@ -121,7 +123,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+      {/* Required: nested routes render here. Removing <SentinelShell><Outlet /></SentinelShell> breaks all child routes. */}
       <SentinelShell><Outlet /></SentinelShell>
     </QueryClientProvider>
   );

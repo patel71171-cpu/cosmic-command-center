@@ -1,6 +1,6 @@
 export type Severity = 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';
 export type Finding = { id: string; title: string; severity: Severity; cvss: number; confidence: string; category: string; asset: string; status: string; detected: string; summary: string; impact: string; fix: string; owner: string; evidence: string[] };
-export type Assessment = { id: string; name: string; target: string; status: string; findings: number; score: number; progress: number; lastRun: string };
+export type Assessment = { id: string; name: string; target: string; status: string; findings: number; score: number; progress: number; lastRun: string; logs?: string[] };
 export const assessments: Assessment[] = [
  {id:'world-monitor',name:'World Monitor Security Assessment',target:'world-monitor.local',status:'Completed',findings:51,score:72,progress:100,lastRun:'27 Sep 2026'},
  {id:'api-security',name:'API Security Assessment',target:'api.world-monitor.local',status:'Running',findings:14,score:64,progress:76,lastRun:'27 Sep 2026'},
