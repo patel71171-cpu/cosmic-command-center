@@ -83,7 +83,7 @@ export function SentinelProvider({ children }: { children: ReactNode }) {
                 evidence: []
               };
               setFindings(f => [newFinding, ...f]);
-              return { ...a, progress: 100, status: 'Completed', findings: a.findings + 1, score: 82, lastRun: new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }), logs: newLogs };
+              return { ...a, progress: 100, status: 'Completed', findings: a.findings + 1, score: 82, lastRun: new Date().toLocaleDateString('en-GB', { dateStyle: 'medium' }), logs: newLogs };
             }
             return { ...a, progress: newProgress, logs: newLogs, lastRun: `Running (${newProgress}%)` };
           }
