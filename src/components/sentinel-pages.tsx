@@ -1757,22 +1757,9 @@ export function Posture() {
             Compare the initial assessment with the post-remediation re-test.
           </p>
         </div>
-        <div className="flex rounded-md border border-border bg-secondary p-1">
-          {(["Before", "After"] as const).map((v) => (
-            <Button
-              key={v}
-              onClick={() => setComparison(v)}
-              variant={comparison === v ? "default" : "ghost"}
-              size="sm"
-              className="h-7 text-xs"
-            >
-              {v}
-            </Button>
-          ))}
-        </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_200px_1fr]">
-        <div className={`panel p-6 ${comparison === "Before" ? "border-high" : ""}`}>
+        <div className="panel border-high p-6">
           <div className="eyebrow text-high">BEFORE REMEDIATION</div>
           <div className="mt-7 flex items-end gap-2">
             <strong className="text-5xl font-semibold">54</strong>
@@ -1802,7 +1789,7 @@ export function Posture() {
             52% risk reduction
           </div>
         </div>
-        <div className={`panel p-6 ${comparison === "After" ? "border-success" : ""}`}>
+        <div className="panel border-success p-6">
           <div className="eyebrow text-success">AFTER VERIFICATION</div>
           <div className="mt-7 flex items-end gap-2">
             <strong className="text-5xl font-semibold">82</strong>
@@ -1826,97 +1813,86 @@ export function Posture() {
         </div>
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <Panel title="Risk Reduction by Security Category" sub="Pre vs post-remediation exposure">
-          <div className="mt-2 space-y-3">
+        <Panel title="Risk Reduction by Security Category" sub="Pre vs post-remediation exposure — sorted by improvement">
+          <div className="flex justify-between text-[10px] uppercase font-bold text-muted-foreground mt-4 mb-2">
+            <span className="ml-[130px] text-high/80">BEFORE</span>
+            <span className="mr-14 text-success">AFTER</span>
+          </div>
+          <div className="space-y-4">
             {[
-              { name: "Authorization", before: 16, after: 6, drop: "64%" },
-              { name: "API Security", before: 14, after: 7, drop: "51%" },
-              { name: "Authentication", before: 13, after: 5, drop: "62%" },
-              { name: "Dependencies", before: 12, after: 9, drop: "28%" },
-              { name: "Data Exposure", before: 15, after: 6, drop: "61%" },
-              { name: "Configuration", before: 11, after: 7, drop: "40%" },
+              { name: "Authorization", before: 80, after: 30, beforeVal: 14, afterVal: 5, drop: "-64%" },
+              { name: "Authentication", before: 78, after: 30, beforeVal: 13, afterVal: 5, drop: "-62%" },
+              { name: "Data Exposure", before: 76, after: 30, beforeVal: 13, afterVal: 5, drop: "-61%" },
+              { name: "API Security", before: 66, after: 32, beforeVal: 11, afterVal: 6, drop: "-51%" },
+              { name: "Dependencies", before: 55, after: 40, beforeVal: 9, afterVal: 7, drop: "-28%" },
             ].map((cat) => (
               <div key={cat.name} className="flex items-center text-xs">
                 <div className="w-[130px] font-medium">{cat.name}</div>
-                <div className="flex flex-1 items-center gap-3">
-                  <div className="flex gap-px w-[130px]">
-                    {Array.from({ length: cat.before }).map((_, i) => (
-                      <div key={i} className="h-3 w-[6px] bg-white" />
-                    ))}
+                <div className="flex-1 relative h-6 mr-4">
+                  <div className="absolute top-0 h-2 bg-high/70 rounded-r" style={{width: `${cat.before}%`}}>
+                    <span className="absolute -right-4 top-[-2px] text-[10px] text-muted-foreground">{cat.beforeVal}</span>
                   </div>
-                  <ArrowRight size={12} className="flex-shrink-0 text-muted-foreground" />
-                  <div className="flex gap-px w-[130px]">
-                    {Array.from({ length: cat.after }).map((_, i) => (
-                      <div key={i} className="h-3 w-[6px] bg-white" />
-                    ))}
+                  <div className="absolute bottom-0 h-2 bg-success/80 rounded-r" style={{width: `${cat.after}%`}}>
+                    <span className="absolute -right-3 top-[-2px] text-[10px] text-muted-foreground">{cat.afterVal}</span>
                   </div>
-                  <div className="flex w-12 items-center justify-end gap-0.5 text-right font-medium">
-                    {cat.drop} <ArrowDownRight size={12} />
-                  </div>
+                </div>
+                <div className="w-12 text-center rounded-full bg-success/10 border border-success/30 text-success text-[10px] py-0.5 font-bold">
+                  {cat.drop}
                 </div>
               </div>
             ))}
           </div>
+          <div className="flex justify-between items-center text-xs border-t border-border mt-6 pt-4">
+            <span className="text-muted-foreground">Average risk reduction</span>
+            <span className="font-bold text-success text-sm">53%</span>
+          </div>
         </Panel>
         <Panel title="Remaining Security Risk" sub="Analysis of residual exposure">
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <div className="mb-4 text-xs font-medium text-muted-foreground">Critical Paths</div>
-              <div className="mb-2 text-sm font-semibold">API Authorization</div>
-              <div className="flex flex-col">
-                <div className="flex items-center">
-                  <div className="h-2 w-2 rounded-full bg-border" />
-                  <div className="h-[1px] w-12 bg-border" />
-                  <div className="h-2 w-2 rounded-full bg-border" />
-                  <div className="h-[1px] w-12 bg-border" />
-                  <div className="h-2 w-2 rounded-full bg-border" />
-                </div>
-                <div className="mt-1 flex items-start pl-1">
-                  <div className="h-4 w-12 border-l border-border" />
-                  <div className="h-4 w-12 border-l border-border" />
-                </div>
-                <div className="flex gap-4 pl-1 text-xs font-medium text-muted-foreground">
-                  <span>User API</span>
-                  <span>Data API</span>
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center gap-8 mt-2">
+              <div className="relative h-24 w-24">
+                <svg width="96" height="96" viewBox="0 0 100 100" className="-rotate-90">
+                  <circle cx="50" cy="50" r="36" fill="none" strokeWidth="14" className="stroke-secondary" />
+                  <circle cx="50" cy="50" r="36" fill="none" strokeWidth="14" className="stroke-medium" strokeDasharray="165.3 226.2" />
+                  <circle cx="50" cy="50" r="36" fill="none" strokeWidth="14" className="stroke-high" strokeDasharray="52.2 226.2" strokeDashoffset="-165.3" />
+                  <circle cx="50" cy="50" r="36" fill="none" strokeWidth="14" className="stroke-critical" strokeDasharray="8.7 226.2" strokeDashoffset="-217.5" />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center pt-1">
+                  <div className="text-2xl font-bold leading-none">26</div>
+                  <div className="text-[9px] text-muted-foreground leading-tight mt-1">open<br/>findings</div>
                 </div>
               </div>
-
-              <div className="mt-8 border-t border-border pt-4">
-                <div className="mb-4 text-xs font-medium text-muted-foreground">Top Remaining Risks</div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs">
-                    <span>1. API Authorization</span>
-                    <span className="font-medium text-critical">Critical</span>
+              <div className="flex-1">
+                <div className="text-[9px] uppercase font-bold text-muted-foreground mb-3">Open By Severity</div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="w-16 flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-critical" /> Critical</div>
+                    <div className="flex-1"><div className="h-1.5 rounded-full bg-critical w-[5%]" /></div>
+                    <div className="font-bold">1</div>
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span>2. Exposed Endpoint</span>
-                    <span className="font-medium text-high">High</span>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="w-16 flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-high" /> High</div>
+                    <div className="flex-1"><div className="h-1.5 rounded-full bg-high w-[25%]" /></div>
+                    <div className="font-bold">6</div>
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span>3. Dependency Risk</span>
-                    <span className="font-medium text-high">High</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span>4. Data Validation</span>
-                    <span className="font-medium text-medium">Medium</span>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="w-16 flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-medium" /> Medium</div>
+                    <div className="flex-1"><div className="h-1.5 rounded-full bg-medium w-[90%]" /></div>
+                    <div className="font-bold">19</div>
                   </div>
                 </div>
               </div>
             </div>
-            
-            <div>
-              <div className="mb-4 text-xs font-medium text-muted-foreground">Open Findings</div>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-critical font-semibold">1</span> Critical
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-high font-semibold">6</span> High
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-medium font-semibold">19</span> Medium
-                </div>
+
+            <div className="rounded-md border border-critical/30 bg-critical/5 p-4 flex items-center justify-between mt-2">
+              <div>
+                <div className="text-[9px] uppercase font-bold text-critical mb-1">Critical Path Requiring Attention</div>
+                <div className="font-bold text-sm mb-1">API Authorization</div>
+                <div className="text-xs text-muted-foreground">1 unresolved critical finding &mdash; full access control bypass risk</div>
               </div>
+              <Button variant="outline" size="sm" className="border-success/30 text-success hover:bg-success/10 text-xs h-7">
+                View remediation plan &rarr;
+              </Button>
             </div>
           </div>
         </Panel>
