@@ -1867,17 +1867,17 @@ export function Posture() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs">
                     <div className="w-16 flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-critical" /> Critical</div>
-                    <div className="flex-1"><div className="h-1.5 rounded-full bg-critical w-[5%]" /></div>
+                    <div className="flex-1"><div className="h-1.5 rounded-full bg-gradient-to-r from-critical/40 to-critical w-[5%]" /></div>
                     <div className="font-bold">1</div>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     <div className="w-16 flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-high" /> High</div>
-                    <div className="flex-1"><div className="h-1.5 rounded-full bg-high w-[25%]" /></div>
+                    <div className="flex-1"><div className="h-1.5 rounded-full bg-gradient-to-r from-high/40 to-high w-[25%]" /></div>
                     <div className="font-bold">6</div>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     <div className="w-16 flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-medium" /> Medium</div>
-                    <div className="flex-1"><div className="h-1.5 rounded-full bg-medium w-[90%]" /></div>
+                    <div className="flex-1"><div className="h-1.5 rounded-full bg-gradient-to-r from-medium/40 to-medium w-[90%]" /></div>
                     <div className="font-bold">19</div>
                   </div>
                 </div>
