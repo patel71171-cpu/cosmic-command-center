@@ -1850,16 +1850,16 @@ export function Posture() {
         <Panel title="Remaining Security Risk" sub="Analysis of residual exposure">
           <div className="flex flex-col gap-6">
             <div className="flex items-center gap-8 mt-2">
-              <div className="relative h-24 w-24">
-                <svg width="96" height="96" viewBox="0 0 100 100" className="-rotate-90">
-                  <circle cx="50" cy="50" r="36" fill="none" strokeWidth="14" className="stroke-secondary" />
-                  <circle cx="50" cy="50" r="36" fill="none" strokeWidth="14" className="stroke-medium" strokeDasharray="165.3 226.2" />
-                  <circle cx="50" cy="50" r="36" fill="none" strokeWidth="14" className="stroke-high" strokeDasharray="52.2 226.2" strokeDashoffset="-165.3" />
-                  <circle cx="50" cy="50" r="36" fill="none" strokeWidth="14" className="stroke-critical" strokeDasharray="8.7 226.2" strokeDashoffset="-217.5" />
+              <div className="relative h-32 w-32 flex-shrink-0">
+                <svg width="128" height="128" viewBox="0 0 100 100" className="-rotate-90">
+                  <circle cx="50" cy="50" r="38" fill="none" strokeWidth="12" className="stroke-secondary/40" />
+                  <circle cx="50" cy="50" r="38" fill="none" strokeWidth="12" className="stroke-medium" strokeDasharray="171.3 238.76" />
+                  <circle cx="50" cy="50" r="38" fill="none" strokeWidth="12" className="stroke-high" strokeDasharray="52.1 238.76" strokeDashoffset="-174.3" />
+                  <circle cx="50" cy="50" r="38" fill="none" strokeWidth="12" className="stroke-critical" strokeDasharray="6.3 238.76" strokeDashoffset="-229.4" />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center pt-1">
-                  <div className="text-2xl font-bold leading-none">26</div>
-                  <div className="text-[9px] text-muted-foreground leading-tight mt-1">open<br/>findings</div>
+                  <div className="text-[28px] font-bold leading-none">26</div>
+                  <div className="text-[10px] text-muted-foreground leading-tight mt-1">open<br/>findings</div>
                 </div>
               </div>
               <div className="flex-1">
@@ -1890,9 +1890,9 @@ export function Posture() {
                 <div className="font-bold text-sm mb-1">API Authorization</div>
                 <div className="text-xs text-muted-foreground">1 unresolved critical finding &mdash; full access control bypass risk</div>
               </div>
-              <Button variant="outline" size="sm" className="border-success/30 text-success hover:bg-success/10 text-xs h-7">
+              <Link to="/remediation" className="inline-flex items-center justify-center rounded-md border border-success/30 px-3 h-7 text-xs font-medium text-success transition-colors hover:bg-success/10">
                 View remediation plan &rarr;
-              </Button>
+              </Link>
             </div>
           </div>
         </Panel>
