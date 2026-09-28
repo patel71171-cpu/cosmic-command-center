@@ -1648,14 +1648,17 @@ export function Remediation() {
                     <select
                       aria-label={`Owner for ${f.title}`}
                       value={f.owner}
-                      onChange={(e) => updateFinding(f.id, { owner: e.target.value })}
-                      className="max-w-[125px] bg-transparent text-xs"
+                      onChange={(e) => {
+                        updateFinding(f.id, { owner: e.target.value });
+                        notify(`Assigned to ${e.target.value}.`);
+                      }}
+                      className="rounded border border-border bg-secondary px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     >
-                      <option>Unassigned</option>
-                      <option>Priya Shah</option>
-                      <option>Arjun Mehta</option>
-                      <option>Nisha Rao</option>
-                      <option>Alex Morgan</option>
+                      <option value="Unassigned">Unassigned</option>
+                      <option value="Priya Shah">Priya Shah</option>
+                      <option value="Arjun Mehta">Arjun Mehta</option>
+                      <option value="Nisha Rao">Nisha Rao</option>
+                      <option value="Alex Morgan">Alex Morgan</option>
                     </select>
                   </td>
                   <td className={td}>
