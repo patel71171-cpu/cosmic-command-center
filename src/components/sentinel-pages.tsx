@@ -1829,24 +1829,28 @@ export function Posture() {
         <Panel title="Risk Reduction by Security Category" sub="Pre vs post-remediation exposure">
           <div className="mt-2 space-y-3">
             {[
-              { name: "Authorization", b: "w-full", a: "w-[36%]", drop: "64%" },
-              { name: "API Security", b: "w-[90%]", a: "w-[39%]", drop: "51%" },
-              { name: "Authentication", b: "w-[80%]", a: "w-[18%]", drop: "62%" },
-              { name: "Dependencies", b: "w-[75%]", a: "w-[47%]", drop: "28%" },
-              { name: "Data Exposure", b: "w-[85%]", a: "w-[24%]", drop: "61%" },
-              { name: "Configuration", b: "w-[70%]", a: "w-[30%]", drop: "40%" },
+              { name: "Authorization", before: 16, after: 6, drop: "64%" },
+              { name: "API Security", before: 14, after: 7, drop: "51%" },
+              { name: "Authentication", before: 13, after: 5, drop: "62%" },
+              { name: "Dependencies", before: 12, after: 9, drop: "28%" },
+              { name: "Data Exposure", before: 15, after: 6, drop: "61%" },
+              { name: "Configuration", before: 11, after: 7, drop: "40%" },
             ].map((cat) => (
               <div key={cat.name} className="flex items-center text-xs">
-                <div className="w-[120px] font-medium">{cat.name}</div>
+                <div className="w-[130px] font-medium">{cat.name}</div>
                 <div className="flex flex-1 items-center gap-3">
-                  <div className="h-4 w-[120px] flex-shrink-0 bg-secondary">
-                    <div className={`h-full bg-border ${cat.b}`} />
+                  <div className="flex gap-px w-[130px]">
+                    {Array.from({ length: cat.before }).map((_, i) => (
+                      <div key={i} className="h-3 w-[6px] bg-white" />
+                    ))}
                   </div>
                   <ArrowRight size={12} className="flex-shrink-0 text-muted-foreground" />
-                  <div className="h-4 w-[120px] flex-shrink-0 bg-secondary">
-                    <div className={`h-full bg-success/80 ${cat.a}`} />
+                  <div className="flex gap-px w-[130px]">
+                    {Array.from({ length: cat.after }).map((_, i) => (
+                      <div key={i} className="h-3 w-[6px] bg-white" />
+                    ))}
                   </div>
-                  <div className="flex w-12 items-center justify-end gap-0.5 text-right text-success">
+                  <div className="flex w-12 items-center justify-end gap-0.5 text-right font-medium">
                     {cat.drop} <ArrowDownRight size={12} />
                   </div>
                 </div>
