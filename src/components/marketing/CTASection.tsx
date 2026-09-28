@@ -16,12 +16,12 @@ export function CTASection() {
         </p>
         
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link to="/dashboard">
+          <Link to="/login">
             <Button size="lg" className="h-14 px-8 text-base rounded-full bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] hover:shadow-[0_0_40px_rgba(99,102,241,0.5)] transition-all border-none">
               Start Assessment <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           </Link>
-          <Link to="/dashboard">
+          <Link to="/login">
             <Button size="lg" variant="outline" className="h-14 px-8 text-base rounded-full border-white/20 hover:bg-white/10 bg-[#101522] text-white">
               Explore Dashboard
             </Button>

@@ -31,7 +31,7 @@ export function Hero() {
         </p>
         
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
-          <Link to="/dashboard">
+          <Link to="/login">
             <Button size="lg" className="h-14 px-8 text-base rounded-full bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] shadow-[0_0_30px_rgba(99,102,241,0.4)] hover:shadow-[0_0_40px_rgba(99,102,241,0.6)] transition-all border-none">
               Start Assessment <ArrowRight className="ml-2 w-4 h-4" />
             </Button>

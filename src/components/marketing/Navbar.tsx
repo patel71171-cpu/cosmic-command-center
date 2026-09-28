@@ -34,7 +34,7 @@ export function Navbar() {
         
         <div className="hidden md:flex items-center gap-4">
           <Link to="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Sign In</Link>
-          <Link to="/dashboard">
+          <Link to="/login">
             <Button className="bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] hover:opacity-90 shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all rounded-full px-6">
               Get Started
             </Button>
@@ -54,7 +54,7 @@ export function Navbar() {
           <a href="#security" className="text-lg font-medium text-slate-300 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Security</a>
           <div className="h-px bg-white/5 w-full my-2"></div>
           <Link to="/login" className="text-lg font-medium text-slate-300 hover:text-white">Sign In</Link>
-          <Link to="/dashboard">
+          <Link to="/login">
             <Button className="w-full bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] rounded-full">
               Get Started
             </Button>

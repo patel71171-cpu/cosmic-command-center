@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useLocation,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -78,10 +79,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "SENTINEL — Security Command Center" },
+      { title: "SENTINEL | Security Command Center" },
       { name: "description", content: "A unified view of findings, assets, exposure, and security operations." },
       { name: "author", content: "" },
-      { property: "og:title", content: "SENTINEL — Security Command Center" },
+      { property: "og:title", content: "SENTINEL | Security Command Center" },
       { property: "og:description", content: "A unified view of findings, assets, exposure, and security operations." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -120,11 +121,17 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const location = useLocation();
+
+  const isStandalonePage = location.pathname === "/" || location.pathname === "/login";
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <SentinelShell><Outlet /></SentinelShell> breaks all child routes. */}
-      <SentinelShell><Outlet /></SentinelShell>
+      {isStandalonePage ? (
+        <Outlet />
+      ) : (
+        <SentinelShell><Outlet /></SentinelShell>
+      )}
     </QueryClientProvider>
   );
 }
