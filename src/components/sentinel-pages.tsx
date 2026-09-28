@@ -150,7 +150,7 @@ export function Dashboard() {
             {assessments.slice(0, 4).map((a) => (
               <Link key={a.id} to="/assessments/$id" params={{ id: a.id }} className="block group">
                 <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate group-hover:text-primary">{a.name}</span>
+                  <span className="truncate group-hover:text-[#38bdf8]">{a.name}</span>
                   <span className="shrink-0 text-muted-foreground">{a.progress}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-secondary">
