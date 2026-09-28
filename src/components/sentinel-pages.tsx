@@ -133,17 +133,25 @@ function exportToPDF(assessment: Assessment, findings: Finding[], notify: (msg: 
     doc.text("Prioritized Findings", margin, y);
     y += 16;
 
+    // Column x positions — well spread out to avoid overlap
+    const col = {
+      title:    margin + 12,
+      severity: margin + 260,
+      cvss:     margin + 360,
+      asset:    margin + 420,
+    };
+
     // Table header
     doc.setFillColor(241, 245, 249);
-    doc.roundedRect(margin, y, W - margin * 2, 20, 3, 3, "F");
+    doc.rect(margin, y, W - margin * 2, 22, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    doc.text("FINDING", margin + 8, y + 13);
-    doc.text("SEVERITY", W - margin - 110, y + 13);
-    doc.text("CVSS", W - margin - 50, y + 13);
-    doc.text("TARGET", W - margin - 30, y + 13, { align: "right" });
-    y += 24;
+    doc.text("FINDING",  col.title,    y + 14);
+    doc.text("SEVERITY", col.severity, y + 14);
+    doc.text("CVSS",     col.cvss,     y + 14);
+    doc.text("ASSET",    col.asset,    y + 14);
+    y += 26;
 
     const severityColors: Record<string, [number, number, number]> = {
       Critical: [239, 68, 68], High: [249, 115, 22], Medium: [234, 179, 8], Low: [34, 197, 94], Informational: [148, 163, 184]
@@ -154,32 +162,38 @@ function exportToPDF(assessment: Assessment, findings: Finding[], notify: (msg: 
         doc.addPage();
         y = 60;
       }
-      const rowColor: [number, number, number] = idx % 2 === 0 ? [255, 255, 255] : [248, 250, 252];
-      doc.setFillColor(...rowColor);
-      doc.rect(margin, y - 4, W - margin * 2, 20, "F");
+      // Row background
+      doc.setFillColor(...(idx % 2 === 0 ? [255, 255, 255] as [number,number,number] : [248, 250, 252] as [number,number,number]));
+      doc.rect(margin, y - 4, W - margin * 2, 22, "F");
 
-      // Severity dot
+      // Severity colour dot
       const sc = severityColors[f.severity] ?? [148, 163, 184];
       doc.setFillColor(...sc);
-      doc.circle(margin + 4, y + 6, 3, "F");
+      doc.circle(margin + 5, y + 7, 3, "F");
 
+      // Title — truncate so it doesn't bleed into the next column
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(15, 23, 42);
-      const title = doc.splitTextToSize(f.title, W - margin * 2 - 150)[0];
-      doc.text(title, margin + 12, y + 8);
+      const titleText = doc.splitTextToSize(f.title, 220)[0];
+      doc.text(titleText, col.title, y + 9);
 
+      // Severity label
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(...sc);
-      doc.text(f.severity, W - margin - 110, y + 8);
+      doc.text(f.severity, col.severity, y + 9);
 
+      // CVSS score
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100, 116, 139);
-      doc.text(String(f.cvss), W - margin - 50, y + 8);
-      const targetText = doc.splitTextToSize(f.target, 80)[0];
-      doc.text(targetText, W - margin - 30, y + 8, { align: "right" });
-      y += 22;
+      doc.text(f.cvss != null ? String(f.cvss) : "—", col.cvss, y + 9);
+
+      // Asset — truncate to avoid overflow
+      const assetText = doc.splitTextToSize(f.asset ?? "—", 110)[0];
+      doc.text(assetText, col.asset, y + 9);
+
+      y += 24;
     });
 
     // ── Footer ────────────────────────────────────────────────────────
