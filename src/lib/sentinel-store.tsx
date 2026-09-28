@@ -11,6 +11,7 @@ type Store = {
   categories: {name: string, count: number}[];
   updateFinding: (id: string, patch: Partial<Finding>) => void;
   addAssessment: (a: Assessment) => void;
+  removeAssessment: (id: string) => void;
   addFinding: (f: Finding) => void;
   notify: (message: string) => void;
   message: string;
@@ -146,6 +147,7 @@ export function SentinelProvider({ children }: { children: ReactNode }) {
         categories,
         updateFinding: (id, patch) => setFindings(items => items.map(f => f.id === id ? { ...f, ...patch } : f)),
         addAssessment: a => setAssessments(items => [a, ...items]),
+        removeAssessment: id => setAssessments(items => items.filter(a => a.id !== id)),
         addFinding: f => setFindings(items => [f, ...items]),
         notify,
         message,

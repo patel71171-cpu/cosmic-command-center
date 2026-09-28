@@ -25,6 +25,8 @@ import {
   Check,
   Wrench,
   Filter as FilterIcon,
+  Trash,
+  Edit2
 } from "lucide-react";
 import { useSentinel } from "@/lib/sentinel-store";
 import { type Finding, type Assessment } from "@/lib/sentinel-data";
@@ -269,7 +271,7 @@ export function Dashboard() {
   );
 }
 export function Assessments() {
-  const { assessments } = useSentinel();
+  const { assessments, removeAssessment, notify } = useSentinel();
   const [q, setQ] = useState(""),
     [status, setStatus] = useState("All"),
     [risk, setRisk] = useState("All");
@@ -387,9 +389,19 @@ export function Assessments() {
                     </td>
                     <td className={`${td} text-muted-foreground`}>{a.lastRun}</td>
                     <td className={td}>
-                      <SectionLink to="/assessments/$id" params={{ id: a.id }}>
-                        Open
-                      </SectionLink>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" asChild title="Open">
+                          <Link to="/assessments/$id" params={{ id: a.id }}><ExternalLink size={14} /></Link>
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Edit" onClick={() => notify('Edit assessment flow is not implemented in this demo.')}>
+                          <Edit2 size={14} />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-critical" title="Delete" onClick={() => {
+                          if (confirm(`Are you sure you want to delete ${a.name}?`)) removeAssessment(a.id);
+                        }}>
+                          <Trash size={14} />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -481,6 +493,7 @@ export function NewAssessment() {
                 value={name}
                 set={setName}
                 placeholder="e.g. World Monitor Security Assessment"
+                required={true}
               />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
@@ -488,12 +501,14 @@ export function NewAssessment() {
                   value={target}
                   set={setTarget}
                   placeholder="world-monitor.local"
+                  required={true}
                 />
                 <Field
                   label="Target URL"
                   value={url}
                   set={setUrl}
                   placeholder="https://example.local"
+                  required={true}
                 />
               </div>
               <label className="block text-xs">
@@ -623,7 +638,19 @@ export function NewAssessment() {
           <div className="flex gap-2">
             {step > 0 && <Action onClick={() => setStep((v) => v - 1)}>Back</Action>}
             {step < 4 ? (
-              <Action variant="default" onClick={() => setStep((v) => v + 1)}>
+              <Action variant="default" onClick={() => {
+                if (step === 0) {
+                  if (!name.trim()) return notify("Assessment name is required.");
+                  if (!target.trim()) return notify("Target application is required.");
+                  if (!url.trim()) return notify("Target URL is required.");
+                  try {
+                    new URL(url);
+                  } catch (e) {
+                    return notify("Target URL must be a valid URL (e.g. https://example.local)");
+                  }
+                }
+                setStep((v) => v + 1);
+              }}>
                 Continue
               </Action>
             ) : (
@@ -647,15 +674,17 @@ function Field({
   value,
   set,
   placeholder,
+  required
 }: {
   label: string;
   value: string;
   set: (v: string) => void;
   placeholder: string;
+  required?: boolean;
 }) {
   return (
     <label className="block text-xs">
-      {label}
+      {label} {required && <span className="text-white">*</span>}
       <Input
         value={value}
         onChange={(e) => set(e.target.value)}
