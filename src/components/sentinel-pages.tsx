@@ -328,10 +328,30 @@ export function Dashboard() {
   );
 }
 export function Assessments() {
-  const { assessments, removeAssessment, notify } = useSentinel();
+  const { assessments, removeAssessment, updateAssessment, notify } = useSentinel();
   const [q, setQ] = useState(""),
     [status, setStatus] = useState("All"),
     [risk, setRisk] = useState("All");
+  // Edit dialog state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTarget, setEditTarget] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+
+  const openEdit = (a: Assessment) => {
+    setEditingId(a.id);
+    setEditName(a.name);
+    setEditTarget(a.target);
+    setEditStatus(a.status);
+  };
+  const saveEdit = () => {
+    if (!editName.trim()) return notify("Assessment name cannot be empty.");
+    if (!editTarget.trim()) return notify("Target cannot be empty.");
+    updateAssessment(editingId!, { name: editName, target: editTarget, status: editStatus as any });
+    notify("Assessment updated successfully.");
+    setEditingId(null);
+  };
+
   const rows = assessments.filter(
     (a) =>
       `${a.name} ${a.target}`.toLowerCase().includes(q.toLowerCase()) &&
@@ -345,6 +365,35 @@ export function Assessments() {
   );
   return (
     <>
+      {/* Edit Dialog */}
+      <Dialog open={!!editingId} onOpenChange={(open) => !open && setEditingId(null)}>
+        <DialogContent className="border-border bg-panel sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Edit Assessment</DialogTitle>
+          </DialogHeader>
+          <div className="mt-2 space-y-4">
+            <label className="block text-xs">
+              Assessment Name <span className="text-white">*</span>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="mt-2 border-border bg-secondary" placeholder="e.g. World Monitor Security Assessment" />
+            </label>
+            <label className="block text-xs">
+              Target <span className="text-white">*</span>
+              <Input value={editTarget} onChange={(e) => setEditTarget(e.target.value)} className="mt-2 border-border bg-secondary" placeholder="world-monitor.local" />
+            </label>
+            <label className="block text-xs">
+              Status
+              <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} className="mt-2 block h-10 w-full rounded-md border border-border bg-secondary px-3 text-xs text-foreground">
+                {["Running","Completed","Scheduled","Failed","Draft"].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => setEditingId(null)}>Cancel</Button>
+            <Button size="sm" className="text-xs" onClick={saveEdit}>Save Changes</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <PageHeading
         title="Security Assessments"
         description="Track assessment coverage, execution, and outcomes across your applications."
@@ -450,7 +499,7 @@ export function Assessments() {
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" asChild title="Open">
                           <Link to="/assessments/$id" params={{ id: a.id }}><ExternalLink size={14} /></Link>
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Edit" onClick={() => notify('Edit assessment flow is not implemented in this demo.')}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Edit" onClick={() => openEdit(a)}>
                           <Edit2 size={14} />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-critical" title="Delete" onClick={() => {

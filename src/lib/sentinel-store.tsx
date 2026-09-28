@@ -10,6 +10,7 @@ type Store = {
   severityData: {name: string, value: number}[];
   categories: {name: string, count: number}[];
   updateFinding: (id: string, patch: Partial<Finding>) => void;
+  updateAssessment: (id: string, patch: Partial<Assessment>) => void;
   addAssessment: (a: Assessment) => void;
   removeAssessment: (id: string) => void;
   addFinding: (f: Finding) => void;
@@ -146,6 +147,7 @@ export function SentinelProvider({ children }: { children: ReactNode }) {
         severityData,
         categories,
         updateFinding: (id, patch) => setFindings(items => items.map(f => f.id === id ? { ...f, ...patch } : f)),
+        updateAssessment: (id, patch) => setAssessments(items => items.map(a => a.id === id ? { ...a, ...patch } : a)),
         addAssessment: a => setAssessments(items => [a, ...items]),
         removeAssessment: id => setAssessments(items => items.filter(a => a.id !== id)),
         addFinding: f => setFindings(items => [f, ...items]),
