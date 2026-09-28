@@ -155,7 +155,7 @@ export function Dashboard() {
                 </div>
                 <div className="h-1.5 rounded-full bg-secondary">
                   <div
-                    className="h-full rounded-full bg-primary"
+                    className="h-full rounded-full bg-[#38bdf8]"
                     style={{ width: `${a.progress}%` }}
                   />
                 </div>
