@@ -1890,7 +1890,7 @@ export function Posture() {
                 <div className="font-bold text-sm mb-1">API Authorization</div>
                 <div className="text-xs text-muted-foreground">1 unresolved critical finding &mdash; full access control bypass risk</div>
               </div>
-              <Link to="/remediation" className="inline-flex items-center justify-center rounded-md border border-success/30 px-3 h-7 text-xs font-medium text-success transition-colors hover:bg-success/10">
+              <Link to="/remediation" className="inline-flex items-center justify-center whitespace-nowrap px-3 h-7 text-xs font-medium text-success transition-colors hover:bg-success/10 rounded">
                 View remediation plan &rarr;
               </Link>
             </div>
