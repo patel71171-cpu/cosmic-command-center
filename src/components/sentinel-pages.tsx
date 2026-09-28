@@ -1475,26 +1475,6 @@ export function Remediation() {
           </table>
         </div>
       </Panel>
-      <div className="mt-4">
-        <Panel title="Verification Workflow">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-7">
-            {[
-              "Finding",
-              "Assigned",
-              "Fix in Progress",
-              "Fix Submitted",
-              "Re-test",
-              "Verified",
-              "Closed",
-            ].map((x, i) => (
-              <div key={x} className="rounded border border-border bg-secondary p-3 text-xs">
-                <span className="text-primary">0{i + 1}</span>
-                <div className="mt-2">{x}</div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      </div>
     </>
   );
 }
