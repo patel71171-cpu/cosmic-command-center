@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -2420,6 +2420,70 @@ export function Login() {
     [password, setPassword] = useState(""),
     [remember, setRemember] = useState(true),
     [error, setError] = useState("");
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let raf: number;
+
+    type Particle = { x: number; y: number; r: number; dx: number; dy: number; o: number; do_: number };
+    let particles: Particle[] = [];
+
+    const init = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      particles = [];
+      const n = Math.floor((canvas.width * canvas.height) / 7500);
+      for (let i = 0; i < n; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          r: Math.random() * 2 + 0.5,
+          dx: (Math.random() - 0.5) * 0.4,
+          dy: -Math.random() * 0.6 - 0.2,
+          o: Math.random(),
+          do_: (Math.random() - 0.5) * 0.015,
+        });
+      }
+    };
+
+    const tick = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach((p) => {
+        p.x += p.dx; p.y += p.dy;
+        p.o += p.do_;
+        if (p.o < 0.05) p.do_ = Math.abs(p.do_);
+        if (p.o > 0.95) p.do_ = -Math.abs(p.do_);
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+        // Large glowing orbs
+        if (p.r > 2) {
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 5);
+          g.addColorStop(0, `rgba(160,80,240,${p.o * 0.9})`);
+          g.addColorStop(1, `rgba(160,80,240,0)`);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r * 5, 0, Math.PI * 2);
+          ctx.fillStyle = g;
+          ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(192,100,255,${p.o})`;
+        ctx.fill();
+      });
+      raf = requestAnimationFrame(tick);
+    };
+
+    window.addEventListener("resize", init);
+    init(); tick();
+    return () => { window.removeEventListener("resize", init); cancelAnimationFrame(raf); };
+  }, []);
+
   const signIn = () => {
     if (!email || !password) {
       setError("Enter an email and password, or continue with the demo.");
@@ -2427,76 +2491,100 @@ export function Login() {
     }
     navigate({ to: "/dashboard" });
   };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md">
-        <div className="mb-9 text-center">
-          <div className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-md bg-primary text-primary-foreground">
-            <ShieldCheck size={27} />
+    <div className="relative min-h-screen w-full overflow-hidden">
+      {/* Circuit board background — hue-rotate shifts from red → purple to match theme */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: "url('/login-bg.png')",
+          filter: "hue-rotate(270deg) saturate(1.8) brightness(0.65)",
+        }}
+      />
+      {/* Dark overlay for depth */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(140,50,220,0.18),transparent_60%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-background/50 pointer-events-none" />
+
+      {/* Animated particle canvas */}
+      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
+
+      {/* Login card */}
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Logo / Brand */}
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 inline-grid h-14 w-14 place-items-center rounded-xl bg-primary/20 border border-primary/40 backdrop-blur shadow-lg shadow-primary/20">
+              <ShieldCheck size={28} className="text-primary" />
+            </div>
+            <div className="text-2xl font-bold tracking-[.15em] text-foreground">SENTINEL</div>
+            <div className="mt-1 text-[11px] uppercase tracking-widest text-muted-foreground">
+              Evidence-Driven Security Assessment
+            </div>
           </div>
-          <div className="text-xl font-bold tracking-[.12em]">SENTINEL</div>
-          <div className="mt-2 text-xs text-muted-foreground">
-            EVIDENCE-DRIVEN SECURITY ASSESSMENT
-          </div>
-        </div>
-        <div className="panel p-7">
-          <h1 className="text-xl font-semibold">Welcome back</h1>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Access the Security Assessment Platform demo.
-          </p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              signIn();
-            }}
-            className="mt-7 space-y-5"
-          >
-            <Field
-              label="Email address"
-              value={email}
-              set={setEmail}
-              placeholder="analyst@example.com"
-            />
-            <label className="block text-xs">
-              Password
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="mt-2 border-border bg-secondary"
+
+          {/* Glass card */}
+          <div className="rounded-2xl border border-border/40 bg-panel/70 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl">
+            <h1 className="text-xl font-semibold">Welcome back</h1>
+            <p className="mt-1 text-xs text-muted-foreground">Access the Security Assessment Platform demo.</p>
+
+            <form
+              onSubmit={(e) => { e.preventDefault(); signIn(); }}
+              className="mt-7 space-y-5"
+            >
+              <Field
+                label="Email address"
+                value={email}
+                set={setEmail}
+                placeholder="analyst@example.com"
               />
-            </label>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-                className="accent-primary"
-              />
-              Remember me
-            </label>
-            {error && <p className="text-xs text-critical">{error}</p>}
-            <Button type="submit" className="w-full">
-              Sign in
+              <label className="block text-xs">
+                Password
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="mt-2 border-border bg-secondary/60 backdrop-blur"
+                />
+              </label>
+
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  Remember me
+                </label>
+                <a href="#" className="text-xs text-primary hover:underline">Forgot password?</a>
+              </div>
+
+              {error && <p className="text-xs text-critical">{error}</p>}
+
+              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 shadow-lg shadow-primary/30">
+                Sign in
+              </Button>
+            </form>
+
+            <div className="my-5 flex items-center gap-3 text-[10px] text-muted-foreground">
+              <div className="h-px flex-1 bg-border" />OR<div className="h-px flex-1 bg-border" />
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => navigate({ to: "/dashboard" })}
+              className="w-full border-border/60 hover:bg-accent/40"
+            >
+              Continue with demo
             </Button>
-          </form>
-          <div className="my-5 flex items-center gap-3 text-[10px] text-muted-foreground">
-            <div className="h-px flex-1 bg-border" />
-            OR
-            <div className="h-px flex-1 bg-border" />
           </div>
-          <Button
-            variant="outline"
-            onClick={() => navigate({ to: "/dashboard" })}
-            className="w-full"
-          >
-            Continue with demo
-          </Button>
+          <p className="mt-5 text-center text-xs text-muted-foreground/60">
+            Demo access only · No real authentication is performed.
+          </p>
         </div>
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Demo access only · No real authentication is performed.
-        </p>
       </div>
     </div>
   );
