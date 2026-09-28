@@ -1826,33 +1826,94 @@ export function Posture() {
         </div>
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <Panel title={`${comparison} Snapshot`} sub="Selected assessment state">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded border border-border bg-secondary p-4">
-              <div className="text-xs text-muted-foreground">Security score</div>
-              <div className="mt-2 text-2xl font-semibold">{data.score}/100</div>
-            </div>
-            <div className="rounded border border-border bg-secondary p-4">
-              <div className="text-xs text-muted-foreground">Critical + high</div>
-              <div className="mt-2 text-2xl font-semibold">{data.critical + data.high}</div>
-            </div>
-          </div>
-        </Panel>
-        <Panel
-          title="Security Category Coverage"
-          sub="Assessment coverage across application layers"
-        >
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-            {Array.from({ length: 24 }, (_, i) => (
-              <div
-                title={["Authorization", "API Security", "Dependencies", "Authentication"][i % 4]}
-                key={i}
-                className={`aspect-square rounded-sm ${i % 7 === 0 ? "bg-high/70" : i % 5 === 0 ? "bg-primary/40" : "bg-success/60"}`}
-              />
+        <Panel title="Risk Reduction by Security Category" sub="Pre vs post-remediation exposure">
+          <div className="mt-2 space-y-3">
+            {[
+              { name: "Authorization", b: "w-full", a: "w-[36%]", drop: "64%" },
+              { name: "API Security", b: "w-[90%]", a: "w-[39%]", drop: "51%" },
+              { name: "Authentication", b: "w-[80%]", a: "w-[18%]", drop: "62%" },
+              { name: "Dependencies", b: "w-[75%]", a: "w-[47%]", drop: "28%" },
+              { name: "Data Exposure", b: "w-[85%]", a: "w-[24%]", drop: "61%" },
+              { name: "Configuration", b: "w-[70%]", a: "w-[30%]", drop: "40%" },
+            ].map((cat) => (
+              <div key={cat.name} className="flex items-center text-xs">
+                <div className="w-[120px] font-medium">{cat.name}</div>
+                <div className="flex flex-1 items-center gap-3">
+                  <div className="h-4 w-[120px] flex-shrink-0 bg-secondary">
+                    <div className={`h-full bg-border ${cat.b}`} />
+                  </div>
+                  <ArrowRight size={12} className="flex-shrink-0 text-muted-foreground" />
+                  <div className="h-4 w-[120px] flex-shrink-0 bg-secondary">
+                    <div className={`h-full bg-success/80 ${cat.a}`} />
+                  </div>
+                  <div className="flex w-12 items-center justify-end gap-0.5 text-right text-success">
+                    {cat.drop} <ArrowDownRight size={12} />
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
-          <div className="mt-4 text-xs text-muted-foreground">
-            86% of prioritized categories tested · 4 gaps remain
+        </Panel>
+        <Panel title="Remaining Security Risk" sub="Analysis of residual exposure">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <div className="mb-4 text-xs font-medium text-muted-foreground">Critical Paths</div>
+              <div className="mb-2 text-sm font-semibold">API Authorization</div>
+              <div className="flex flex-col">
+                <div className="flex items-center">
+                  <div className="h-2 w-2 rounded-full bg-border" />
+                  <div className="h-[1px] w-12 bg-border" />
+                  <div className="h-2 w-2 rounded-full bg-border" />
+                  <div className="h-[1px] w-12 bg-border" />
+                  <div className="h-2 w-2 rounded-full bg-border" />
+                </div>
+                <div className="mt-1 flex items-start pl-1">
+                  <div className="h-4 w-12 border-l border-border" />
+                  <div className="h-4 w-12 border-l border-border" />
+                </div>
+                <div className="flex gap-4 pl-1 text-xs font-medium text-muted-foreground">
+                  <span>User API</span>
+                  <span>Data API</span>
+                </div>
+              </div>
+
+              <div className="mt-8 border-t border-border pt-4">
+                <div className="mb-4 text-xs font-medium text-muted-foreground">Top Remaining Risks</div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span>1. API Authorization</span>
+                    <span className="font-medium text-critical">Critical</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span>2. Exposed Endpoint</span>
+                    <span className="font-medium text-high">High</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span>3. Dependency Risk</span>
+                    <span className="font-medium text-high">High</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span>4. Data Validation</span>
+                    <span className="font-medium text-medium">Medium</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <div className="mb-4 text-xs font-medium text-muted-foreground">Open Findings</div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-critical font-semibold">1</span> Critical
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-high font-semibold">6</span> High
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-medium font-semibold">19</span> Medium
+                </div>
+              </div>
+            </div>
           </div>
         </Panel>
       </div>
