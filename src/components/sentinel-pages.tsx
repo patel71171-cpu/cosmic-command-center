@@ -217,8 +217,120 @@ function exportToPDF(assessment: Assessment, findings: Finding[], notify: (msg: 
     notify("Failed to generate PDF. Please try again.");
   }
 }
+
+// ── Export: Findings list ─────────────────────────────────────────────────
+function exportFindingsToPDF(rows: Finding[], notify: (msg: string) => void) {
+  notify("Generating findings PDF…");
+  try {
+    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+    const W = doc.internal.pageSize.getWidth();
+    const margin = 48;
+    let y = 60;
+    doc.setFillColor(99, 102, 241); doc.rect(0, 0, W, 8, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.setTextColor(15, 23, 42);
+    doc.text("Findings Report", margin, y); y += 20;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-GB")} · Total: ${rows.length}`, margin, y); y += 8;
+    doc.setDrawColor(226, 232, 240); doc.line(margin, y, W - margin, y); y += 22;
+    const sc2: Record<string, [number, number, number]> = { Critical:[239,68,68], High:[249,115,22], Medium:[234,179,8], Low:[34,197,94], Informational:[148,163,184] };
+    const col = { id: margin+4, title: margin+50, sev: margin+290, cvss: margin+370, status: margin+430 };
+    doc.setFillColor(241,245,249); doc.rect(margin, y, W-margin*2, 22, "F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(100,116,139);
+    doc.text("ID",col.id,y+14); doc.text("FINDING TITLE",col.title,y+14); doc.text("SEVERITY",col.sev,y+14); doc.text("CVSS",col.cvss,y+14); doc.text("STATUS",col.status,y+14);
+    y += 26;
+    rows.forEach((f,idx) => {
+      if (y > doc.internal.pageSize.getHeight()-80) { doc.addPage(); y=60; }
+      const c = sc2[f.severity]??[148,163,184];
+      doc.setFillColor(...(idx%2===0?[255,255,255] as [number,number,number]:[248,250,252] as [number,number,number])); doc.rect(margin,y-4,W-margin*2,22,"F");
+      doc.setFillColor(...c); doc.circle(margin+5,y+7,3,"F");
+      doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(100,116,139);
+      doc.text(f.id,col.id,y+9); doc.setTextColor(15,23,42); doc.text(doc.splitTextToSize(f.title,230)[0],col.title,y+9);
+      doc.setFont("helvetica","bold"); doc.setTextColor(...c); doc.text(f.severity,col.sev,y+9);
+      doc.setFont("helvetica","normal"); doc.setTextColor(100,116,139); doc.text(f.cvss!=null?String(f.cvss):"—",col.cvss,y+9); doc.text(f.status??"Open",col.status,y+9);
+      y+=22;
+    });
+    const tp=doc.getNumberOfPages(); for(let p=1;p<=tp;p++){doc.setPage(p);const ph=doc.internal.pageSize.getHeight();doc.setDrawColor(226,232,240);doc.line(margin,ph-30,W-margin,ph-30);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(148,163,184);doc.text("SENTINEL Security Platform — Confidential",margin,ph-16);doc.text(`Page ${p} of ${tp}`,W-margin,ph-16,{align:"right"});}
+    doc.save("SENTINEL_Findings.pdf"); notify("Findings PDF downloaded!");
+  } catch(err){ console.error(err); notify("Failed to generate PDF."); }
+}
+
+// ── Export: Single finding detail ─────────────────────────────────────────
+function exportFindingDetailToPDF(f: Finding, notify: (msg: string) => void) {
+  notify("Generating finding PDF…");
+  try {
+    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+    const W = doc.internal.pageSize.getWidth();
+    const margin = 48;
+    let y = 60;
+    const sc2: Record<string,[number,number,number]> = {Critical:[239,68,68],High:[249,115,22],Medium:[234,179,8],Low:[34,197,94],Informational:[148,163,184]};
+    const c = sc2[f.severity]??[148,163,184];
+    doc.setFillColor(...c); doc.rect(0,0,W,8,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(17); doc.setTextColor(15,23,42);
+    const titleLines = doc.splitTextToSize(f.title, W - margin * 2);
+    doc.text(titleLines, margin, y); y += titleLines.length * 20 + 4;
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(100,116,139);
+    doc.text(`${f.id}  ·  ${f.severity}  ·  CVSS ${f.cvss??"—"}  ·  ${f.status??"Open"}  ·  Asset: ${f.asset??"—"}`,margin,y); y+=14;
+    doc.setDrawColor(226,232,240); doc.line(margin,y,W-margin,y); y+=18;
+    const section=(t:string)=>{if(y>doc.internal.pageSize.getHeight()-80){doc.addPage();y=60;}doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(15,23,42);doc.text(t,margin,y);y+=15;};
+    const body=(t:string)=>{doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(71,85,105);const ls=doc.splitTextToSize(t,W-margin*2);if(y+ls.length*13>doc.internal.pageSize.getHeight()-60){doc.addPage();y=60;}doc.text(ls,margin,y);y+=ls.length*13+12;};
+    section("Summary"); body(f.summary??"No summary.");
+    section("Potential Impact"); body(f.impact??"Not specified.");
+    section("Remediation"); body(f.fix??"No guidance.");
+    if((f.evidence??[]).length){section("Evidence");(f.evidence??[]).forEach((ev,i)=>body(`${i+1}. ${ev}`));}
+    if((f.steps??[]).length){section("Reproduction Steps");(f.steps??[]).forEach((s,i)=>body(`${i+1}. ${s}`));}
+    if(f.technical){section("Technical Analysis");body(f.technical);}
+    const tp=doc.getNumberOfPages(); for(let p=1;p<=tp;p++){doc.setPage(p);const ph=doc.internal.pageSize.getHeight();doc.setDrawColor(226,232,240);doc.line(margin,ph-30,W-margin,ph-30);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(148,163,184);doc.text("SENTINEL Security Platform — Confidential",margin,ph-16);doc.text(`Page ${p} of ${tp}`,W-margin,ph-16,{align:"right"});}
+    doc.save(`SENTINEL_Finding_${f.id}.pdf`); notify("Finding PDF downloaded!");
+  } catch(err){ console.error(err); notify("Failed to generate PDF."); }
+}
+
+// ── Export: Full executive report ─────────────────────────────────────────
+function exportReportToPDF(title: string, findings: Finding[], notify: (msg: string) => void) {
+  notify("Generating report PDF…");
+  try {
+    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
+    const W = doc.internal.pageSize.getWidth();
+    const margin = 48;
+    let y = 60;
+    doc.setFillColor(99,102,241); doc.rect(0,0,W,8,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(22); doc.setTextColor(15,23,42);
+    doc.text(title,margin,y); y+=22;
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(100,116,139);
+    doc.text(`World Monitor Security Assessment · Generated ${new Date().toLocaleDateString("en-GB")}`,margin,y); y+=8;
+    doc.setDrawColor(226,232,240); doc.line(margin,y,W-margin,y); y+=22;
+    const critical=findings.filter(f=>f.severity==="Critical").length;
+    const high=findings.filter(f=>f.severity==="High").length;
+    const mW=(W-margin*2)/4;
+    const mets:[string,string,[number,number,number]][]=[["Security Score","72/100",[34,197,94]],["Critical",String(critical),[239,68,68]],["High",String(high),[249,115,22]],["Total Findings",String(findings.length),[99,102,241]]];
+    mets.forEach(([label,value,color],i)=>{const x=margin+i*mW;doc.setFillColor(248,250,252);doc.roundedRect(x,y,mW-8,60,6,6,"F");doc.setFont("helvetica","bold");doc.setFontSize(20);doc.setTextColor(...color);doc.text(value,x+(mW-8)/2,y+28,{align:"center"});doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(100,116,139);doc.text(label.toUpperCase(),x+(mW-8)/2,y+46,{align:"center"});});
+    y+=80;
+    doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.setTextColor(15,23,42); doc.text("Executive Summary",margin,y); y+=16;
+    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(71,85,105);
+    const sum=`The World Monitor assessment found ${findings.length} findings. Score: 72/100. ${critical} critical and ${high} high severity issues require immediate attention.`;
+    const sl=doc.splitTextToSize(sum,W-margin*2); doc.text(sl,margin,y); y+=sl.length*14+20;
+    doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.setTextColor(15,23,42); doc.text("All Findings",margin,y); y+=16;
+    const sc2:Record<string,[number,number,number]>={Critical:[239,68,68],High:[249,115,22],Medium:[234,179,8],Low:[34,197,94],Informational:[148,163,184]};
+    const col={title:margin+12,sev:margin+270,cvss:margin+360,status:margin+430};
+    doc.setFillColor(241,245,249); doc.rect(margin,y,W-margin*2,22,"F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(100,116,139);
+    doc.text("FINDING",col.title,y+14); doc.text("SEVERITY",col.sev,y+14); doc.text("CVSS",col.cvss,y+14); doc.text("STATUS",col.status,y+14); y+=26;
+    findings.forEach((f,idx)=>{
+      if(y>doc.internal.pageSize.getHeight()-80){doc.addPage();y=60;}
+      const c=sc2[f.severity]??[148,163,184];
+      doc.setFillColor(...(idx%2===0?[255,255,255] as [number,number,number]:[248,250,252] as [number,number,number])); doc.rect(margin,y-4,W-margin*2,22,"F");
+      doc.setFillColor(...c); doc.circle(margin+5,y+7,3,"F");
+      doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(15,23,42); doc.text(doc.splitTextToSize(f.title,250)[0],col.title,y+9);
+      doc.setFont("helvetica","bold"); doc.setTextColor(...c); doc.text(f.severity,col.sev,y+9);
+      doc.setFont("helvetica","normal"); doc.setTextColor(100,116,139); doc.text(f.cvss!=null?String(f.cvss):"—",col.cvss,y+9); doc.text(f.status??"Open",col.status,y+9);
+      y+=22;
+    });
+    const tp=doc.getNumberOfPages(); for(let p=1;p<=tp;p++){doc.setPage(p);const ph=doc.internal.pageSize.getHeight();doc.setDrawColor(226,232,240);doc.line(margin,ph-30,W-margin,ph-30);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(148,163,184);doc.text("SENTINEL Security Platform — Confidential",margin,ph-16);doc.text(`Page ${p} of ${tp}`,W-margin,ph-16,{align:"right"});}
+    doc.save("SENTINEL_Security_Report.pdf"); notify("Report PDF downloaded!");
+  } catch(err){ console.error(err); notify("Failed to generate PDF."); }
+}
+
 export function Dashboard() {
-  const { findings, assessments } = useSentinel();
+  const { findings, assessments, notify } = useSentinel();
   const navigate = useNavigate();
   return (
     <>
@@ -227,7 +339,7 @@ export function Dashboard() {
         description="A clear view of your application security posture and assessment activity."
         actions={
           <>
-            <Action icon={Download} onClick={() => navigate({ to: "/reports" })}>
+            <Action icon={Download} onClick={() => exportReportToPDF("Executive Security Report", findings, notify)}>
               Export Report
             </Action>
             <Button size="sm" className="h-9 gap-2 text-xs" asChild>
@@ -1065,7 +1177,7 @@ export function RiskGraph() {
   );
 }
 export function Findings() {
-  const { findings, severityData } = useSentinel();
+  const { findings, severityData, notify } = useSentinel();
   const [q, setQ] = useState(""),
     [severity, setSeverity] = useState("All"),
     [category, setCategory] = useState("All"),
@@ -1087,15 +1199,7 @@ export function Findings() {
         actions={
           <Action
             icon={Download}
-            onClick={() =>
-              exportText(
-                "sentinel-findings.csv",
-                [
-                  "ID,Finding,Severity,CVSS,Status",
-                  ...rows.map((f) => `${f.id},"${f.title}",${f.severity},${f.cvss},${f.status}`),
-                ].join("\n"),
-              )
-            }
+            onClick={() => exportFindingsToPDF(rows, notify)}
           >
             Export Findings
           </Action>
@@ -1411,12 +1515,7 @@ export function FindingDetail({ id }: { id: string }) {
               </Action>
               <Action
                 icon={Download}
-                onClick={() =>
-                  exportText(
-                    `${f.id}.txt`,
-                    `${f.title}\n${f.summary}\n\nEvidence: ${f.evidence.join(", ")}\nFix: ${f.fix}`,
-                  )
-                }
+                onClick={() => exportFindingDetailToPDF(f, notify)}
               >
                 Export
               </Action>
@@ -1997,12 +2096,7 @@ export function ReportDetail({ id }: { id: string }) {
           <>
             <Action
               icon={Download}
-              onClick={() =>
-                exportText(
-                  `sentinel-${id}-report.txt`,
-                  `${title}\nWorld Monitor Security Assessment\nScore: 72/100\nCritical: 3 | High: 12 | Medium: 18\n\n${findings.map((f) => `${f.id}: ${f.title} — ${f.severity}\n${f.summary}`).join("\n\n")}`,
-                )
-              }
+              onClick={() => exportReportToPDF(title, findings, notify)}
             >
               Export Report
             </Action>
