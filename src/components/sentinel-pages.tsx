@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
+import { verifyGoogleToken } from "../lib/auth-server";
 import { useGoogleLogin } from "@react-oauth/google";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -2621,11 +2622,23 @@ export function Login() {
   };
 
   const googleLogin = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
+    onSuccess: async (tokenResponse) => {
       console.log("Google auth successful", tokenResponse);
-      // In a real app, send the tokenResponse to your backend for verification
-      setError("");
-      navigate({ to: "/dashboard" });
+      
+      try {
+        const result = await verifyGoogleToken({ data: { token: tokenResponse.access_token } });
+        
+        if (result.success) {
+          console.log("Backend verification successful, user:", result.user);
+          setError("");
+          window.location.href = "/dashboard";
+        } else {
+          setError("Backend authentication failed.");
+        }
+      } catch (err) {
+        console.error("Backend error:", err);
+        setError("Server error during authentication.");
+      }
     },
     onError: (error) => {
       console.error("Google auth failed", error);
