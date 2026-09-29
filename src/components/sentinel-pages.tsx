@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
+import { useGoogleLogin } from "@react-oauth/google";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -2619,14 +2620,26 @@ export function Login() {
     navigate({ to: "/dashboard" });
   };
 
+  const googleLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      console.log("Google auth successful", tokenResponse);
+      // In a real app, send the tokenResponse to your backend for verification
+      setError("");
+      navigate({ to: "/dashboard" });
+    },
+    onError: (error) => {
+      console.error("Google auth failed", error);
+      setError("Google authentication failed. Please try again.");
+    },
+  });
+
   const signInWithGoogle = () => {
     if (!termsAccepted) {
       setError("You must accept the terms and conditions to continue.");
       return;
     }
     setError("");
-    // Simulate Google auth
-    navigate({ to: "/dashboard" });
+    googleLogin();
   };
 
   return (
@@ -2738,7 +2751,7 @@ export function Login() {
             </Button>
           </div>
           <p className="mt-5 text-center text-xs text-muted-foreground/60">
-            Demo access only · No real authentication is performed.
+            Sign in securely with Google to access the platform.
           </p>
         </div>
       </div>

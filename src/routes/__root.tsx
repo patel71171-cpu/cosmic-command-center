@@ -119,6 +119,8 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { GoogleOAuthProvider } from "@react-oauth/google";
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const location = useLocation();
@@ -126,12 +128,14 @@ function RootComponent() {
   const isStandalonePage = location.pathname === "/" || location.pathname === "/login";
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {isStandalonePage ? (
-        <Outlet />
-      ) : (
-        <SentinelShell><Outlet /></SentinelShell>
-      )}
-    </QueryClientProvider>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID_HERE"}>
+      <QueryClientProvider client={queryClient}>
+        {isStandalonePage ? (
+          <Outlet />
+        ) : (
+          <SentinelShell><Outlet /></SentinelShell>
+        )}
+      </QueryClientProvider>
+    </GoogleOAuthProvider>
   );
 }
