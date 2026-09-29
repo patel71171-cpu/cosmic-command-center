@@ -7,6 +7,103 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from './sentinel-ui';
 import { useSentinel } from '@/lib/sentinel-store';
 import { assets, trend, type Finding, type Severity } from '@/lib/sentinel-data';
+import { jsPDF } from 'jspdf';
+
+function exportOverviewToPDF(findings: Finding[], notify: (msg: string) => void) {
+  notify('Generating overview PDF…');
+  try {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+    const W = doc.internal.pageSize.getWidth();
+    const margin = 48;
+    let y = 60;
+
+    // Indigo header bar
+    doc.setFillColor(99, 102, 241); doc.rect(0, 0, W, 8, 'F');
+
+    // Title
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(15, 23, 42);
+    doc.text('Security Command Center', margin, y); y += 22;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 116, 139);
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')} · World Monitor Security Assessment`, margin, y); y += 10;
+    doc.setDrawColor(226, 232, 240); doc.line(margin, y, W - margin, y); y += 22;
+
+    // KPI metrics row
+    const critical = findings.filter(f => f.severity === 'Critical').length;
+    const high = findings.filter(f => f.severity === 'High').length;
+    const open = findings.filter(f => f.status !== 'Verified').length;
+    const remediated = findings.filter(f => f.status === 'Verified').length;
+    const kpis: [string, string, [number,number,number]][] = [
+      ['Security Score', '72/100', [34, 197, 94]],
+      ['Critical', String(critical), [239, 68, 68]],
+      ['High', String(high), [249, 115, 22]],
+      ['Open Findings', String(open), [249, 115, 22]],
+      ['Remediated', String(remediated), [34, 197, 94]],
+      ['Total Findings', String(findings.length), [99, 102, 241]],
+    ];
+    const kW = (W - margin * 2) / 3;
+    kpis.forEach(([label, value, color], i) => {
+      const row = Math.floor(i / 3), col2 = i % 3;
+      const x = margin + col2 * kW, yy = y + row * 70;
+      doc.setFillColor(248, 250, 252); doc.roundedRect(x, yy, kW - 8, 58, 6, 6, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(...color);
+      doc.text(value, x + (kW - 8) / 2, yy + 26, { align: 'center' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+      doc.text(label.toUpperCase(), x + (kW - 8) / 2, yy + 44, { align: 'center' });
+    });
+    y += Math.ceil(kpis.length / 3) * 70 + 16;
+
+    // Executive summary
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(15, 23, 42);
+    doc.text('Executive Summary', margin, y); y += 16;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(71, 85, 105);
+    const summary = `The SENTINEL Security Command Center reports ${findings.length} total findings across the World Monitor assessment. ${critical} critical and ${high} high severity issues have been identified. ${remediated} findings are verified as remediated, leaving ${open} open findings that require attention. The overall security score is 72/100.`;
+    const sumLines = doc.splitTextToSize(summary, W - margin * 2);
+    doc.text(sumLines, margin, y); y += sumLines.length * 14 + 20;
+
+    // Findings table
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(15, 23, 42);
+    doc.text('All Findings', margin, y); y += 16;
+
+    const sevColors: Record<string, [number,number,number]> = { Critical:[239,68,68], High:[249,115,22], Medium:[234,179,8], Low:[34,197,94], Informational:[148,163,184] };
+    const col = { title: margin+12, sev: margin+260, cvss: margin+360, status: margin+430 };
+    doc.setFillColor(241,245,249); doc.rect(margin, y, W-margin*2, 22, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(100,116,139);
+    doc.text('FINDING', col.title, y+14); doc.text('SEVERITY', col.sev, y+14); doc.text('CVSS', col.cvss, y+14); doc.text('STATUS', col.status, y+14);
+    y += 26;
+
+    findings.forEach((f, idx) => {
+      if (y > doc.internal.pageSize.getHeight() - 80) { doc.addPage(); y = 60; }
+      const c = sevColors[f.severity] ?? [148,163,184];
+      doc.setFillColor(...(idx%2===0 ? [255,255,255] as [number,number,number] : [248,250,252] as [number,number,number]));
+      doc.rect(margin, y-4, W-margin*2, 22, 'F');
+      doc.setFillColor(...c); doc.circle(margin+5, y+7, 3, 'F');
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(15,23,42);
+      doc.text(doc.splitTextToSize(f.title, 240)[0], col.title, y+9);
+      doc.setFont('helvetica','bold'); doc.setTextColor(...c); doc.text(f.severity, col.sev, y+9);
+      doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
+      doc.text(f.cvss != null ? String(f.cvss) : '—', col.cvss, y+9);
+      doc.text(f.status ?? 'Open', col.status, y+9);
+      y += 22;
+    });
+
+    // Footer on every page
+    const totalPages = doc.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      const ph = doc.internal.pageSize.getHeight();
+      doc.setDrawColor(226,232,240); doc.line(margin, ph-30, W-margin, ph-30);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(148,163,184);
+      doc.text('SENTINEL Security Platform — Confidential', margin, ph-16);
+      doc.text(`Page ${p} of ${totalPages}`, W-margin, ph-16, { align: 'right' });
+    }
+
+    doc.save('SENTINEL_Overview_Report.pdf');
+    notify('Overview PDF downloaded!');
+  } catch (err) {
+    console.error(err);
+    notify('Failed to generate PDF.');
+  }
+}
 
 const severityTones: Record<Severity, string> = { Critical: 'critical', High: 'high', Medium: 'medium', Low: 'low', Informational: 'muted-foreground' };
 const severityOrder: Severity[] = ['Critical', 'High', 'Medium', 'Low'];
@@ -20,12 +117,7 @@ function Panel({ title, note, action, children, className = '' }: { title: strin
 function Kpi({ label, value, sub, icon: Icon, tone = 'primary', direction = 'up' }: { label: string; value: string; sub: string; icon: typeof Activity; tone?: string; direction?: 'up' | 'down' }) {
   return <div className="command-panel relative min-w-0 px-4 py-3.5"><div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-medium uppercase text-muted-foreground">{label}</span><Icon size={15} className={`shrink-0 text-${tone}`} /></div><div className="mt-3 flex items-end justify-between gap-2"><strong className="truncate text-[25px] leading-none font-semibold tabular-nums text-foreground">{value}</strong><span className={`flex shrink-0 items-center text-[10px] text-${tone}`}>{direction === 'up' ? <ArrowUpRight size={12}/> : <ArrowDownRight size={12}/>}</span></div><p className="mt-2 truncate text-[10px] text-muted-foreground">{sub}</p></div>;
 }
-function downloadCsv(findings: Finding[]) {
-  const rows = [['ID', 'Title', 'Severity', 'Asset', 'Status', 'Owner'], ...findings.map(f => [f.id, f.title, f.severity, f.asset, f.status, f.owner])];
-  const csv = rows.map(row => row.map(cell => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'sentinel-findings.csv'; anchor.click(); URL.revokeObjectURL(url);
-}
+
 export function SentinelOverview() {
   const { findings, assessments, selectedAssessment, setSelectedAssessment, updateFinding, notify } = useSentinel();
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('30D');
@@ -43,7 +135,7 @@ export function SentinelOverview() {
   return <div className="space-y-4 pb-10">
     <div className="flex flex-col justify-between gap-4 border-b border-border pb-5 xl:flex-row xl:items-end">
       <div className="min-w-0"><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase text-primary"><span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_10px_var(--success)]"/> Security operations / Overview <span className="ml-1 rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary">DEMO DATA</span></div><h1 className="text-[25px] font-semibold leading-tight text-foreground sm:text-[30px]">SENTINEL <span className="font-normal text-muted-foreground">/ Command Center</span></h1><p className="mt-1 text-xs text-muted-foreground">One view of exposure, assessments, incidents, and remediation.</p></div>
-      <div className="flex flex-wrap items-center gap-2"><select aria-label="Assessment" className="h-8 max-w-[210px] rounded-md border border-border bg-secondary px-2 text-[11px] text-foreground" value={selectedAssessment} onChange={e => setSelectedAssessment(e.target.value)}>{assessments.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select><Button variant="outline" size="sm" title="Refresh view" aria-label="Refresh view" onClick={() => { setLastRefreshed(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); notify('Dashboard refreshed'); }}><RefreshCw size={14}/></Button><Button size="sm" onClick={() => downloadCsv(filtered)}><Download size={14}/> Export CSV</Button></div>
+      <div className="flex flex-wrap items-center gap-2"><select aria-label="Assessment" className="h-8 max-w-[210px] rounded-md border border-border bg-secondary px-2 text-[11px] text-foreground" value={selectedAssessment} onChange={e => setSelectedAssessment(e.target.value)}>{assessments.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select><Button variant="outline" size="sm" title="Refresh view" aria-label="Refresh view" onClick={() => { setLastRefreshed(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); notify('Dashboard refreshed'); }}><RefreshCw size={14}/></Button><Button size="sm" onClick={() => exportOverviewToPDF(filtered, notify)}><Download size={14}/> Export PDF</Button></div>
     </div>
     <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6"><Kpi label="Security score" value={`${active?.score ?? 72}/100`} sub="+8 since last review" icon={ShieldCheck} tone="success"/><Kpi label="Critical issues" value={String(findings.filter(f => f.severity === 'Critical' && f.status !== 'Verified').length)} sub="Needs immediate action" icon={Siren} tone="critical" direction="down"/><Kpi label="Open findings" value={String(open)} sub={`${findings.length} total in workspace`} icon={ShieldAlert} tone="high" direction="down"/><Kpi label="Assets monitored" value="48" sub="8 mapped in this view" icon={Globe2} tone="low"/><Kpi label="Active scans" value={String(assessments.filter(a => a.status === 'Running').length)} sub="Across 4 assessments" icon={Radar} tone="primary"/><Kpi label="Remediated" value={String(findings.filter(f => f.status === 'Verified').length)} sub="Verified fixes" icon={CheckCircle2} tone="success"/></div>
     <div className="grid gap-3 lg:grid-cols-12">
