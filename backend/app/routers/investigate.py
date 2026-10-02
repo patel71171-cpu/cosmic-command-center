@@ -41,6 +41,17 @@ class InvestigateRequest(BaseModel):
     message: str | None = None
 
 
+def _strip_fences(text: str) -> str:
+    """Remove a leading markdown code fence, including an optional language tag."""
+    if not text.lstrip().startswith("```"):
+        return text
+    body = text.lstrip()
+    body = body.split("\n", 1)[-1] if "\n" in body else body
+    if "```" in body:
+        body = body.rsplit("```", 1)[0]
+    return body.strip()
+
+
 def _extract_json(text: str) -> str:
     """Pull the outermost {...} block out of a chatty model reply."""
     start = text.find("{")
@@ -48,6 +59,32 @@ def _extract_json(text: str) -> str:
     if start == -1 or end <= start:
         return ""
     return text[start : end + 1]
+
+
+def _salvage_json(text: str) -> dict | None:
+    """Last resort: close an unterminated JSON object and retry.
+
+    Small local models routinely stop mid-string when they run out of budget.
+    Trimming the trailing comma, closing any dangling string, then appending the
+    missing brackets recovers a usable report instead of failing the request.
+    """
+    candidate = _extract_json(text)
+    if not candidate:
+        return None
+    for attempt in (
+        candidate,
+        candidate.rstrip().rstrip(","),
+        candidate.rstrip().rstrip(",") + '"}',
+        candidate.rstrip().rstrip(",") + '"]}',
+        candidate.rstrip().rstrip(",") + '"}]}',
+    ):
+        try:
+            parsed = json.loads(attempt)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
 
 
 def _finding_context(db: Session, finding: Finding) -> str:
@@ -113,17 +150,40 @@ async def investigate_finding(
 
     try:
         async with httpx.AsyncClient(timeout=240) as client:
-            response = await client.post(
-                settings.OLLAMA_URL.rstrip("/") + "/api/chat",
-                json={
-                    "model": settings.OLLAMA_MODEL,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {"temperature": 0.2, "num_predict": 1536},
-                },
-            )
-            response.raise_for_status()
-            payload = response.json()
+            payload = None
+            # Small models occasionally wrap JSON in prose. Give it one retry
+            # with a stricter instruction before giving up on parsing.
+            for attempt_messages in (
+                messages,
+                messages
+                + [
+                    {
+                        "role": "user",
+                        "content": (
+                            "That reply was not valid JSON. Reply with the JSON object only: "
+                            "no preamble, no markdown fence, no trailing commentary."
+                        ),
+                    }
+                ],
+            ):
+                response = await client.post(
+                    settings.OLLAMA_URL.rstrip("/") + "/api/chat",
+                    json={
+                        "model": settings.OLLAMA_MODEL,
+                        "messages": attempt_messages,
+                        "stream": False,
+                        "format": "json",
+                        "options": {"temperature": 0.2, "num_predict": 1536},
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+                raw_try = _strip_fences(((payload.get("message") or {}).get("content") or "").strip())
+                try:
+                    json.loads(raw_try or _extract_json(raw_try) or "")
+                    break
+                except json.JSONDecodeError:
+                    continue
     except Exception as exc:
         raise HTTPException(
             status_code=502,
@@ -131,9 +191,7 @@ async def investigate_finding(
         )
 
     raw = (payload.get("message") or {}).get("content") or ""
-    raw = raw.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    raw = _strip_fences(raw.strip())
 
     report = None
     for candidate in (raw, _extract_json(raw)):
@@ -147,6 +205,8 @@ async def investigate_finding(
             report = parsed
             break
     if report is None:
+        report = _salvage_json(raw)
+    if report is None:
         raise HTTPException(status_code=502, detail="Local model returned an unreadable report")
 
     required = {
@@ -157,8 +217,34 @@ async def investigate_finding(
         "technical_analysis",
         "retest_checklist",
     }
-    if not isinstance(report, dict) or not required.issubset(report):
-        raise HTTPException(status_code=502, detail="Local model returned an incomplete report")
+    if not isinstance(report, dict):
+        raise HTTPException(status_code=502, detail="Local model returned an unreadable report")
+
+    # A truncated reply can still be useful. Keep every key the model produced,
+    # normalise list fields, and fall back to the recorded finding text rather
+    # than failing the whole investigation.
+    fallback = {
+        "executive_summary": finding.summary or finding.title,
+        "why_it_matters": finding.impact or finding.summary or finding.title,
+        "remediation": finding.fix or "No recorded remediation for this finding.",
+        "technical_analysis": finding.summary or finding.title,
+        "reproduction_steps": [f"Re-run the scanner rule {finding.source_rule_id or 'used for this finding'} against {finding.asset or finding.title}."],
+        "retest_checklist": ["Confirm the scanner no longer reports this finding on the same asset."],
+    }
+    normalised: dict = {}
+    for key in required:
+        value = report.get(key)
+        if key in ("reproduction_steps", "retest_checklist"):
+            if isinstance(value, str):
+                value = [line.strip("-* ") for line in value.splitlines() if line.strip()]
+            if not isinstance(value, list) or not value:
+                value = fallback[key]
+            normalised[key] = [str(item) for item in value]
+        else:
+            if not isinstance(value, str) or not value.strip():
+                value = fallback[key]
+            normalised[key] = str(value)
+    report = normalised
 
     finding.analysis = json.dumps(report)
     db.commit()
