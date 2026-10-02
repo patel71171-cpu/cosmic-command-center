@@ -213,3 +213,5 @@ export function CategoryChart() {
     </div>
   );
 }
+
+}

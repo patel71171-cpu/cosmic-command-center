@@ -1,12 +1,14 @@
-import { createFileRoute, redirect } from '@tanstack/react-router';
-export const Route = createFileRoute('/')({
+import { createFileRoute } from "@tanstack/react-router";
+import { MarketingPage } from "@/components/marketing/MarketingPage";
+
+export const Route = createFileRoute("/")({
   head: () => ({ meta: [
-    { title: 'SENTINEL — Security Command Center' },
-    { name: 'description', content: 'Explore the SENTINEL security operations command center.' },
-    { property: 'og:title', content: 'SENTINEL — Security Command Center' },
-    { property: 'og:description', content: 'Explore the SENTINEL security operations command center.' },
-    { property: 'og:type', content: 'website' },
-    { name: 'twitter:card', content: 'summary_large_image' },
+    { title: "SENTINEL | Evidence-Driven Security Assessment" },
+    { name: "description", content: "Discover risk, build evidence, remediate with confidence, and verify the result." },
+    { property: "og:title", content: "SENTINEL | Evidence-Driven Security Assessment" },
+    { property: "og:description", content: "Discover risk, build evidence, remediate with confidence, and verify the result." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary_large_image" },
   ] }),
-  beforeLoad: () => { throw redirect({ to: '/dashboard' }); },
+  component: MarketingPage,
 });

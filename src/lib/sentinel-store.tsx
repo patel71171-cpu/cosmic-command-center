@@ -1,156 +1,184 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { assessments as seedAssessments, findings as seedFindings, type Assessment, type Finding } from './sentinel-data';
-import { api } from './sentinel-api';
+import { createContext, useContext, useState, useMemo, useEffect, type ReactNode } from 'react';
+import { assessments, findings, trend as initialTrend, assets as initialAssets, evidence as initialEvidence, categories as initialCategories, severityData as initialSeverityData, type Assessment, type Finding } from './sentinel-data';
+
 
 type Store = {
   findings: Finding[];
   assessments: Assessment[];
+  trend: any[];
+  assets: any[];
+  evidence: any[];
+  severityData: {name: string, value: number}[];
+  categories: {name: string, count: number}[];
   updateFinding: (id: string, patch: Partial<Finding>) => void;
+  updateAssessment: (id: string, patch: Partial<Assessment>) => void;
   addAssessment: (a: Assessment) => void;
+  removeAssessment: (id: string) => void;
+  addFinding: (f: Finding) => void;
+
   notify: (message: string) => void;
   message: string;
   selectedAssessment: string;
   setSelectedAssessment: (id: string) => void;
-  loading: boolean;
-  backendConnected: boolean;
-  refreshData: () => Promise<void>;
-  runScan: (
-    target: string,
-    name: string,
-    options?: {
-      authorized?: boolean;
-      description?: string | undefined;
-      environment?: string;
-      scope?: string;
-      checks?: string[];
-    },
-  ) => Promise<string | null>;
+  userName: string;
+  setUserName: (name: string) => void;
+
 };
 
 const Context = createContext<Store | null>(null);
 
 export function SentinelProvider({ children }: { children: ReactNode }) {
-  const [allFindings, setFindings] = useState<Finding[]>(seedFindings);
-  const [allAssessments, setAssessments] = useState<Assessment[]>(seedAssessments);
+  const [allFindings, setFindings] = useState(findings);
+  const [allAssessments, setAssessments] = useState(assessments);
+  const [allAssets, setAssets] = useState(initialAssets);
+  const [allEvidence, setEvidence] = useState(initialEvidence);
+  const [allTrend, setTrend] = useState(initialTrend);
+  
+  const [userName, setUserName] = useState('Pratham Patel');
   const [message, setMessage] = useState('');
-  const [selectedAssessment, setSelectedAssessment] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [backendConnected, setBackendConnected] = useState(false);
+  const [selectedAssessment, setSelectedAssessment] = useState('world-monitor');
+
 
   const notify = (text: string) => {
     setMessage(text);
     setTimeout(() => setMessage(''), 4000);
   };
 
-  const refreshData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [assessmentsData, findingsData] = await Promise.all([
-        api.listAssessments(),
-        api.listFindings(),
-      ]);
-      // Replace unconditionally: when authenticated, the backend is the
-      // source of truth. Never keep stale rows once a live result arrives.
-      setAssessments(assessmentsData);
-      setFindings(findingsData);
-      // Keep the header selector pointing at a real record once data loads.
-      setSelectedAssessment(prev =>
-        assessmentsData.some(a => a.id === prev)
-          ? prev
-          : (assessmentsData[0]?.id ?? prev),
-      );
-      setBackendConnected(true);
-    } catch (err) {
-      // Backend unavailable or unauthenticated — keep the current rows and
-      // surface the reason instead of failing silently.
-      if (import.meta.env.DEV) {
-        console.warn('[SENTINEL] refreshData failed:', err);
-      }
-      setBackendConnected(false);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAssessments(prev => {
+        let changed = false;
+        const next = prev.map(a => {
+          if (a.status === 'Running' && a.progress < 100) {
+            changed = true;
+            const newProgress = Math.min(100, a.progress + 12);
+            
+            const timeStr = new Date().toLocaleTimeString('en-GB');
+            const messages = [
+               "Scope validation passed",
+               "132 endpoints indexed",
+               "Static code blocks analyzed",
+               "API boundaries mapped",
+               "Dependencies verified",
+               "Evidence chain captured",
+               "Finding correlated",
+               "Risk calculation completed",
+               "Report generated"
+            ];
+            const msgIdx = Math.floor((newProgress / 100) * (messages.length - 1));
+            const logMsg = `${timeStr} · ${messages[msgIdx]}`;
+            // Avoid duplicate contiguous logs
+            const logs = a.logs || [];
+            const newLogs = logs.length > 0 && logs[0].includes(messages[msgIdx]) ? logs : [logMsg, ...logs];
+
+            if (newProgress === 100) {
+              const newFinding: Finding = {
+                id: `FND-${Date.now()}`,
+                title: `Discovered issue in ${a.target}`,
+                severity: 'High',
+                cvss: 7.5,
+                confidence: 'High',
+                category: 'Configuration',
+                asset: a.target,
+                status: 'Open',
+                detected: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+                summary: 'An automated check discovered a configuration vulnerability during the assessment pipeline.',
+                impact: 'Could allow unintended access or data exposure.',
+                fix: 'Review the configuration against baseline security standards.',
+                owner: 'Unassigned',
+                evidence: []
+              };
+              setFindings(f => [newFinding, ...f]);
+              return { ...a, progress: 100, status: 'Completed', findings: a.findings + 1, score: 82, lastRun: new Date().toLocaleDateString('en-GB', { dateStyle: 'medium' }), logs: newLogs };
+            }
+            return { ...a, progress: newProgress, logs: newLogs, lastRun: `Running (${newProgress}%)` };
+          }
+          return a;
+        });
+        return changed ? next : prev;
+      });
+    }, 1500);
+    return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    refreshData();
-  }, [refreshData]);
-
-  const updateFinding = (id: string, patch: Partial<Finding>) => {
-    const previous = allFindings.find(f => f.id === id);
-    setFindings(items => items.map(f => (f.id === id ? { ...f, ...patch } : f)));
-    // Sync to backend; if the write is rejected (offline, expired token,
-    // RBAC) roll the optimistic edit back so the UI never drifts from the DB.
-    api.updateFinding(id, patch).catch((err: any) => {
-      if (previous) {
-        const snapshot = previous;
-        setFindings(items => items.map(f => (f.id === id ? snapshot : f)));
+  const severityData = useMemo(() => {
+    // Base data to match the "real details" of the 51 total findings in the mock design.
+    // We subtract the 6 seeded findings (1C, 2H, 2M, 1L, 0I) from the base offsets.
+    const counts = { Critical: 2, High: 10, Medium: 16, Low: 6, Informational: 11 };
+    allFindings.forEach(f => {
+      if (f.status !== 'Verified' && f.status !== 'Resolved') {
+        counts[f.severity as keyof typeof counts] = (counts[f.severity as keyof typeof counts] || 0) + 1;
       }
-      notify(`Could not save that change: ${err?.message || 'request failed'}`);
     });
-  };
+    
+    return [
+      { name: 'Critical', value: counts.Critical },
+      { name: 'High', value: counts.High },
+      { name: 'Medium', value: counts.Medium },
+      { name: 'Low', value: counts.Low },
+      { name: 'Informational', value: counts.Informational }
+    ];
+  }, [allFindings]);
 
-  const addAssessment = (a: Assessment) => {
-    setAssessments(items => [a, ...items]);
-  };
-
-  const runScan = async (
-    target: string,
-    name: string,
-    options?: {
-      authorized?: boolean;
-      description?: string | undefined;
-      environment?: string;
-      scope?: string;
-      checks?: string[];
-    },
-  ): Promise<string | null> => {
-    setLoading(true);
-    try {
-      const result = await api.createAssessment({
-        name,
-        target,
-        environment: options?.environment || 'Staging',
-        scope: options?.scope || 'Web Application',
-        checks: options?.checks || [
-          'Authentication',
-          'Authorization',
-          'API Security',
-          'Dependencies',
-        ],
-        description: options?.description,
-        authorized: options?.authorized ?? true,
-      });
-      setAssessments(prev => [result, ...prev]);
-      // Refresh findings from backend
-      const findingsData = await api.listFindings();
-      setFindings(findingsData);
-      setBackendConnected(true);
-      notify(`Assessment started: scanning ${target}`);
-      return result.id;
-    } catch (err: any) {
-      notify(`Scan failed: ${err.message}`);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  };
+  const categories = useMemo(() => {
+    // Base data to match "real details". Subtract 1 from each since the 6 seeded findings cover 1 of each.
+    const cats: Record<string, number> = {
+      'Authorization': 13,
+      'API Security': 10,
+      'Dependencies': 8,
+      'Authentication': 7,
+      'Configuration': 5,
+      'Client Security': 2
+    };
+    allFindings.forEach(f => {
+      if (f.status !== 'Verified' && f.status !== 'Resolved') {
+        cats[f.category] = (cats[f.category] || 0) + 1;
+      }
+    });
+    return Object.entries(cats)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [allFindings]);
 
   return (
-    <Context.Provider
+    <Context.Provider 
       value={{
         findings: allFindings,
         assessments: allAssessments,
-        updateFinding,
-        addAssessment,
+        trend: allTrend,
+        assets: allAssets,
+        evidence: allEvidence,
+        severityData,
+        categories,
+        updateFinding: (id, patch) => setFindings(items => items.map(f => f.id === id ? { ...f, ...patch } : f)),
+        updateAssessment: (id, patch) => setAssessments(items => items.map(a => a.id === id ? { ...a, ...patch } : a)),
+        addAssessment: a => setAssessments(items => [a, ...items]),
+        removeAssessment: id => setAssessments(items => items.filter(a => a.id !== id)),
+        addFinding: f => setFindings(items => [f, ...items]),
+
         notify,
         message,
         selectedAssessment,
         setSelectedAssessment,
-        loading,
-        backendConnected,
-        refreshData,
-        runScan,
+        notify,
+        message,
+        selectedAssessment,
+        setSelectedAssessment,
+        userName,
+        setUserName
+      }}
+    >
+      {children}
+    </Context.Provider>
+  );
+}
+
+export function useSentinel() {
+  const ctx = useContext(Context);
+  if (!ctx) throw new Error('Missing SentinelProvider');
+  return ctx;
+}
+
       }}
     >
       {children}
