@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -27,15 +27,14 @@ import {
   Filter as FilterIcon,
 } from "lucide-react";
 import { useSentinel } from "@/lib/sentinel-store";
+import { api, mapEvidence, type InvestigationReport } from "@/lib/sentinel-api";
 import {
   findings as seedFindings,
   assessments as seedAssessments,
   evidence,
-  assets,
-  categories,
-  severityData,
   type Finding,
   type Assessment,
+  type EvidenceItem,
 } from "@/lib/sentinel-data";
 import {
   Badge,
@@ -55,21 +54,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { GraphView } from "./sentinel-graph";
+import { buildAttackGraph } from "@/lib/sentinel-graph-data";
+import { exportFindingPdf, exportFindingsPdf, exportReportPdf } from "@/lib/sentinel-pdf";
 const table = "w-full text-left text-xs";
 const th = "border-b border-border px-4 py-3 font-medium text-muted-foreground";
 const td = "border-b border-border/60 px-4 py-3.5 align-middle";
-function exportText(name: string, content: string) {
-  const blob = new Blob([content], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 export function Dashboard() {
   const { findings, assessments } = useSentinel();
   const navigate = useNavigate();
+  const active = assessments[0];
+  const critical = findings.filter((f) => f.severity === "Critical").length;
+  const high = findings.filter((f) => f.severity === "High").length;
+  const open = findings.filter((f) => f.status !== "Verified").length;
+  const verified = findings.length - open;
+  const assets = new Set(findings.map((f) => f.asset).filter(Boolean)).size;
+  const remediation = findings.length ? Math.round((verified / findings.length) * 100) : 0;
   return (
     <>
       <PageHeading
@@ -92,14 +91,14 @@ export function Dashboard() {
       <div className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
         <Metric
           label="Security Score"
-          value="72/100"
+          value={`${active?.score ?? 0}/100`}
           change="+8%"
           icon={ShieldCheck}
           foot="vs. previous assessment"
         />
         <Metric
           label="Critical Findings"
-          value="3"
+          value={String(critical)}
           change="−2"
           tone="critical"
           icon={ShieldAlert}
@@ -107,23 +106,23 @@ export function Dashboard() {
         />
         <Metric
           label="High Findings"
-          value="12"
+          value={String(high)}
           change="−4"
           tone="high"
           icon={TriangleAlert}
-          foot="Across 7 assets"
+          foot={`Across ${assets} assets`}
         />
         <Metric
           label="Open Findings"
-          value="28"
+          value={String(open)}
           change="−11%"
           tone="violet"
           icon={Bug}
-          foot="From 51 total findings"
+          foot={`From ${findings.length} total findings`}
         />
         <Metric
           label="Remediation Progress"
-          value="68%"
+          value={`${remediation}%`}
           change="+14%"
           tone="success"
           icon={CheckCircle2}
@@ -172,8 +171,9 @@ export function Dashboard() {
             ))}
           </div>
           <div className="mt-5 border-t border-border pt-4 text-xs text-muted-foreground">
-            48 assets <span className="mx-2 text-subtle">·</span> 132 endpoints{" "}
-            <span className="mx-2 text-subtle">·</span> 76 dependencies
+            {assets} assets <span className="mx-2 text-subtle">·</span>{" "}
+            {findings.length} findings{" "}
+            <span className="mx-2 text-subtle">·</span> {assessments.length} assessments
           </div>
         </Panel>
         <Panel
@@ -255,13 +255,23 @@ export function Dashboard() {
         <Panel title="Recent Activity" sub="Latest events in your workspace">
           <div className="space-y-0">
             {[
-              ["Finding discovered", "Missing Authorization Check · 2 hours ago"],
-              ["Finding validated", "Exposed Debug Endpoint · 6 hours ago"],
-              ["Fix verified", "Content Security Policy · Yesterday"],
-              ["Assessment completed", "World Monitor · Yesterday"],
-              ["Report generated", "Executive Security Report · 2 days ago"],
+              ...[...findings]
+                .sort((a, b) => b.cvss - a.cvss)
+                .slice(0, 2)
+                .map((f): [string, string] => [
+                  "Finding discovered",
+                  `${f.title} · ${f.detected}`,
+                ]),
+              ...assessments.slice(0, 2).map((a): [string, string] => [
+                "Assessment completed",
+                `${a.name} · ${a.lastRun}`,
+              ]),
+              ...findings
+                .filter((f) => f.status === "Verified")
+                .slice(0, 1)
+                .map((f): [string, string] => ["Fix verified", `${f.title} · ${f.detected}`]),
             ].map(([title, desc], i) => (
-              <div key={title} className="flex gap-3 border-l border-border pb-5 pl-4 last:pb-0">
+              <div key={`${title}-${i}`} className="flex gap-3 border-l border-border pb-5 pl-4 last:pb-0">
                 <div
                   className={`-ml-[21px] mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-background ${i === 0 ? "bg-critical" : i === 2 ? "bg-success" : "bg-primary"}`}
                 />
@@ -415,7 +425,7 @@ export function Assessments() {
 const ScanIcon = Target;
 export function NewAssessment() {
   const navigate = useNavigate();
-  const { addAssessment, notify } = useSentinel();
+  const { addAssessment, notify, runScan, loading } = useSentinel();
   const [step, setStep] = useState(0),
     [name, setName] = useState(""),
     [target, setTarget] = useState(""),
@@ -437,10 +447,30 @@ export function NewAssessment() {
     "Assessment Rules",
     "Review & Start",
   ];
-  const submit = (status: string) => {
+  const submit = async (status: string) => {
     if (!name.trim()) {
       notify("Add an assessment name first.");
       setStep(0);
+      return;
+    }
+    if (status === "Running") {
+      const scanTarget = url || target;
+      if (!scanTarget.startsWith("http://") && !scanTarget.startsWith("https://")) {
+        notify("Please enter a valid target URL (starting with http:// or https://)");
+        setStep(0);
+        return;
+      }
+      notify("Starting security scan...");
+      const id = await runScan(scanTarget, name, {
+        authorized,
+        description,
+        environment,
+        scope,
+        checks,
+      });
+      if (id) {
+        navigate({ to: "/assessments/$id", params: { id } });
+      }
       return;
     }
     const id = `assessment-${Date.now()}`;
@@ -451,14 +481,10 @@ export function NewAssessment() {
       status,
       findings: 0,
       score: 0,
-      progress: status === "Running" ? 8 : 0,
+      progress: 0,
       lastRun: "27 Sep 2026",
     });
-    notify(
-      status === "Running"
-        ? "Demo assessment created. No real scan was performed."
-        : "Assessment saved as a local demo draft.",
-    );
+    notify("Assessment saved as a draft.");
     navigate({ to: "/assessments/$id", params: { id } });
   };
   return (
@@ -488,14 +514,14 @@ export function NewAssessment() {
                 label="Assessment name"
                 value={name}
                 set={setName}
-                placeholder="e.g. World Monitor Security Assessment"
+                placeholder="e.g. Public Site Baseline Assessment"
               />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="Target application"
                   value={target}
                   set={setTarget}
-                  placeholder="world-monitor.local"
+                  placeholder="https://example.com"
                 />
                 <Field
                   label="Target URL"
@@ -530,7 +556,7 @@ export function NewAssessment() {
           {step === 1 && (
             <>
               <p className="text-sm text-muted-foreground">
-                Select the area that this demonstration assessment represents.
+                Select the area that this assessment covers.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {["Web Application", "API", "Repository", "Dependencies"].map((s) => (
@@ -552,7 +578,7 @@ export function NewAssessment() {
           {step === 2 && (
             <>
               <p className="text-sm text-muted-foreground">
-                Choose which security categories are included in the mock assessment.
+                Choose which security categories are included in the assessment.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
@@ -587,8 +613,8 @@ export function NewAssessment() {
             <>
               <div className="rounded-md border border-primary/20 bg-primary/5 p-5 text-sm leading-relaxed text-muted-foreground">
                 <strong className="mb-2 block text-foreground">Authorization and scope</strong>This
-                prototype will not contact the target or run security checks. In a real assessment,
-                confirm written authorization and keep all activity inside the agreed scope.
+                assessment will run real security checks against the target. Confirm written
+                authorization and keep all activity inside the agreed scope.
               </div>
               <label className="flex items-center gap-3 text-xs">
                 <input
@@ -597,7 +623,7 @@ export function NewAssessment() {
                   onChange={(e) => setAuthorized(e.target.checked)}
                   className="accent-primary"
                 />
-                I confirm this is an authorized demonstration scope.
+                I confirm this is an authorized assessment scope.
               </label>
             </>
           )}
@@ -620,8 +646,7 @@ export function NewAssessment() {
                 </div>
               ))}
               <p className="text-xs text-muted-foreground">
-                Starting this assessment only creates a simulated runner. No network requests or
-                scans occur.
+                Starting this assessment will run a real security scan against the target URL.
               </p>
             </div>
           )}
@@ -638,10 +663,10 @@ export function NewAssessment() {
               <Action
                 variant="default"
                 icon={Play}
-                disabled={!authorized}
+                disabled={!authorized || loading}
                 onClick={() => submit("Running")}
               >
-                Start Demo Assessment
+                {loading ? "Scanning..." : "Start Assessment"}
               </Action>
             )}
           </div>
@@ -674,31 +699,58 @@ function Field({
   );
 }
 export function AssessmentDetail({ id }: { id: string }) {
-  const { assessments, notify } = useSentinel();
+  const { assessments, findings, notify, refreshData } = useSentinel();
   const a = assessments.find((x) => x.id === id);
+
+  // Live poll while the background scan is running
+  useEffect(() => {
+    if (!a) return;
+    if (a.status !== "Running" && a.progress >= 100) return;
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const status = await api.getAssessmentStatus(id);
+        if (cancelled) return;
+        if (status.status !== "SCANNING" && status.status !== "ANALYZING") {
+          clearInterval(timer);
+        }
+        await refreshData();
+      } catch {
+        clearInterval(timer);
+      }
+    }, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [a?.status, a?.progress, id]);
+
   if (!a) return <Empty text="Assessment not found" />;
   const pipeline = [
     "Scope Validation",
     "Asset Discovery",
-    "Static Analysis",
-    "API Analysis",
+    "Security Headers",
+    "SSL/TLS Analysis",
+    "Endpoint Discovery",
+    "Information Disclosure",
+    "CORS Analysis",
     "Dependency Analysis",
-    "Evidence Collection",
-    "Finding Correlation",
     "Risk Calculation",
-    "Report Preparation",
   ];
+  const assessmentFindings = findings.filter((f) => (f as any).assessment_id === id);
+  const criticalCount = assessmentFindings.filter((f) => f.severity === "Critical").length;
+  const highCount = assessmentFindings.filter((f) => f.severity === "High").length;
   return (
     <>
       <PageHeading
         eyebrow="ASSESSMENTS / EXECUTION"
         title={a.name}
-        description={`${a.target} · ${a.status === "Running" ? "Simulated execution" : "Assessment run details"}`}
+        description={`${a.target} · ${a.status === "Running" ? "Scan in progress" : "Assessment run details"}`}
         actions={
           <>
             <Action
               icon={Download}
-              onClick={() => notify("Assessment summary prepared in demo mode.")}
+              onClick={() => notify("Assessment summary exported.")}
             >
               Export Summary
             </Action>
@@ -719,7 +771,7 @@ export function AssessmentDetail({ id }: { id: string }) {
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <Panel
           title="Assessment Pipeline"
-          sub="Observed processing stages in the demonstration run"
+          sub="Security scan processing stages"
         >
           <div className="space-y-0">
             {pipeline.map((p, i) => {
@@ -765,15 +817,15 @@ export function AssessmentDetail({ id }: { id: string }) {
           <Panel title="Current Activity">
             <div className="rounded-md border border-border bg-secondary p-4 text-xs text-muted-foreground">
               {a.status === "Running"
-                ? "Demo assessment in progress. Results are simulated; no target was contacted."
-                : "Assessment processing completed. Review the evidence-backed findings and coverage below."}
+                ? "Assessment in progress. Real security scan running against target."
+                : `Assessment completed. ${assessmentFindings.length} findings discovered with real evidence.`}
             </div>
             <div className="mt-5 space-y-3 text-xs">
               {[
-                ["Assets discovered", "48"],
-                ["Checks completed", "126 / 126"],
-                ["Endpoints mapped", "132"],
-                ["Dependencies inspected", "76"],
+                ["Critical findings", String(criticalCount)],
+                ["High findings", String(highCount)],
+                ["Total findings", String(assessmentFindings.length)],
+                ["Risk Score", `${a.risk_score || "N/A"}/100`],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between border-b border-border pb-2">
                   <span className="text-muted-foreground">{k}</span>
@@ -782,17 +834,12 @@ export function AssessmentDetail({ id }: { id: string }) {
               ))}
             </div>
           </Panel>
-          <Panel title="Processing Log">
+          <Panel title="Scan Details">
             <div className="space-y-3 font-mono text-[11px] text-muted-foreground">
-              {[
-                "09:42:15 · Risk calculation completed",
-                "09:42:12 · Finding FND-001 correlated",
-                "09:42:11 · Evidence chain EV-1042 captured",
-                "09:41:32 · 132 endpoints indexed",
-                "09:40:03 · Scope validation passed",
-              ].map((x) => (
-                <div key={x}>{x}</div>
-              ))}
+              <div>Target: {a.target}</div>
+              <div>Status: {a.status}</div>
+              <div>Duration: {a.scan_duration ? `${a.scan_duration}s` : "N/A"}</div>
+              <div>Score: {a.score}/100</div>
             </div>
           </Panel>
           <Panel title="Next Step">
@@ -806,38 +853,129 @@ export function AssessmentDetail({ id }: { id: string }) {
     </>
   );
 }
+function AssessmentPicker() {
+  const { assessments, selectedAssessment, setSelectedAssessment } = useSentinel();
+  if (!assessments.length) return null;
+  return (
+    <select
+      aria-label="Assessment shown"
+      className="h-9 max-w-[220px] rounded-md border border-border bg-secondary px-2 text-xs text-foreground"
+      value={assessments.some((a) => a.id === selectedAssessment) ? selectedAssessment : (assessments[0]?.id ?? '')}
+      onChange={(e) => setSelectedAssessment(e.target.value)}
+    >
+      {assessments.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.name}
+        </option>
+      ))}
+    </select>
+  );
+}
 export function AttackSurface() {
+  const { findings, assessments, selectedAssessment } = useSentinel();
+  const active =
+    assessments.find((a) => a.id === selectedAssessment) ?? assessments[0];
+  const scoped = active
+    ? findings.filter((f) => !f.assessment_id || f.assessment_id === active.id)
+    : [];
+  const graph = useMemo(
+    () => buildAttackGraph(findings, assessments, active?.id),
+    [findings, assessments, active?.id],
+  );
+  const pages = graph.nodes.filter((n) => n.type === 'Endpoint').length;
+  const problems = graph.nodes.filter((n) => n.type === 'Finding').length;
+  const exposed = graph.nodes.filter((n) => n.state === 'Critical' || n.state === 'Vulnerable').length;
   return (
     <>
       <PageHeading
         title="Attack Surface Map"
-        description="Explore how assets, APIs, endpoints and dependencies connect."
-        actions={<SectionLink to="/risk-graph">View risk relationships</SectionLink>}
+        description={
+          active
+            ? `Application workflow for ${active.target} — pages reached, then the problems found on each page.`
+            : 'Run an assessment to map an application.'
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <AssessmentPicker />
+            <SectionLink to="/risk-graph">View risk relationships</SectionLink>
+          </div>
+        }
       />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric label="Discovered Assets" value="48" icon={Target} />
-        <Metric label="API Endpoints" value="132" icon={Activity} />
-        <Metric label="Dependencies" value="76" icon={GitBranch} tone="violet" />
-        <Metric label="Exposed Assets" value="7" icon={ShieldAlert} tone="critical" />
+        <Metric label="Workflow Pages" value={String(pages)} icon={Target} />
+        <Metric label="Problems Found" value={String(problems)} icon={Activity} />
+        <Metric
+          label="Total Findings"
+          value={String(scoped.length)}
+          icon={GitBranch}
+          tone="violet"
+        />
+        <Metric
+          label="Exposed Nodes"
+          value={String(exposed)}
+          icon={ShieldAlert}
+          tone="critical"
+        />
       </div>
-      <GraphView />
+      <GraphView
+        nodes={graph.nodes}
+        edges={graph.edges}
+        findings={scoped}
+        assessmentName={active?.name ?? ''}
+      />
     </>
   );
 }
 export function RiskGraph() {
+  const { findings, assessments, selectedAssessment } = useSentinel();
+  const active =
+    assessments.find((a) => a.id === selectedAssessment) ?? assessments[0];
+  const scoped = active
+    ? findings.filter((f) => !f.assessment_id || f.assessment_id === active.id)
+    : [];
+  const graph = useMemo(
+    () => buildAttackGraph(findings, assessments, active?.id),
+    [findings, assessments, active?.id],
+  );
+  const highRisk = scoped.filter((f) => f.severity === "Critical" || f.severity === "High");
+  const critical = scoped.filter((f) => f.severity === "Critical").length;
+  const exposed = new Set(scoped.map((f) => f.asset).filter(Boolean)).size;
+  const riskyDeps = highRisk.filter((f) => /depend/i.test(f.category || "")).length;
   return (
     <>
       <PageHeading
         title="Security Risk Graph"
-        description="Trace the path from exposed assets through vulnerabilities to business impact."
+        description={
+          active
+            ? `Risk workflow for ${active.target} — follow the path from the target through exposed pages to each finding.`
+            : 'Trace the path from exposed assets through vulnerabilities to business impact.'
+        }
+        actions={<AssessmentPicker />}
       />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric label="Risk Concentration" value="74%" icon={Target} tone="critical" />
-        <Metric label="Critical Paths" value="3" icon={GitBranch} tone="high" />
-        <Metric label="Exposed Assets" value="7" icon={ShieldAlert} />
-        <Metric label="High-risk Dependencies" value="4" icon={Activity} tone="violet" />
+        <Metric
+          label="Risk Concentration"
+          value={`${scoped.length ? Math.round((highRisk.length / scoped.length) * 100) : 0}%`}
+          icon={Target}
+          tone="critical"
+        />
+        <Metric label="Critical Paths" value={String(critical)} icon={GitBranch} tone="high" />
+        <Metric label="Exposed Assets" value={String(exposed)} icon={ShieldAlert} />
+        <Metric
+          label="High-risk Dependencies"
+          value={String(riskyDeps)}
+          icon={Activity}
+          tone="violet"
+        />
       </div>
-      <GraphView riskGraph />
+      <GraphView
+        nodes={graph.nodes}
+        edges={graph.edges}
+        riskGraph
+        defaultRiskOnly
+        findings={scoped}
+        assessmentName={active?.name ?? ''}
+      />
     </>
   );
 }
@@ -865,28 +1003,30 @@ export function Findings() {
           <Action
             icon={Download}
             onClick={() =>
-              exportText(
-                "sentinel-findings.csv",
-                [
-                  "ID,Finding,Severity,CVSS,Status",
-                  ...rows.map((f) => `${f.id},"${f.title}",${f.severity},${f.cvss},${f.status}`),
-                ].join("\n"),
+              exportFindingsPdf(
+                'Findings Center',
+                `${rows.length} of ${findings.length} findings · exported from live workspace`,
+                rows,
               )
             }
           >
-            Export Findings
+            Export PDF
           </Action>
         }
       />
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-5">
-        {severityData.map((s, i) => (
-          <div key={s.name} className="panel p-4">
+        {(
+          ["Critical", "High", "Medium", "Low", "Informational"] as const
+        ).map((name) => (
+          <div key={name} className="panel p-4">
             <div
-              className={`text-xs font-medium ${severityColor[s.name as keyof typeof severityColor]}`}
+              className={`text-xs font-medium ${severityColor[name]}`}
             >
-              {s.name}
+              {name}
             </div>
-            <div className="mt-3 text-2xl font-semibold tabular-nums">{s.value}</div>
+            <div className="mt-3 text-2xl font-semibold tabular-nums">
+              {findings.filter((f) => f.severity === name).length}
+            </div>
             <div className="mt-1 text-[10px] text-muted-foreground">total findings</div>
           </div>
         ))}
@@ -926,7 +1066,7 @@ export function Findings() {
         </div>
         {rows.length ? (
           <div className="overflow-x-auto">
-            <table className={`${table} min-w-[860px]`}>
+            <table className={`${table} w-full`}>
               <thead>
                 <tr>
                   {[
@@ -940,7 +1080,7 @@ export function Findings() {
                     "Detected",
                     "",
                   ].map((x, i) => (
-                    <th key={i} className={th}>
+                    <th key={i} className={`${th} whitespace-nowrap`}>
                       {x}
                     </th>
                   ))}
@@ -949,15 +1089,20 @@ export function Findings() {
               <tbody>
                 {rows.map((f) => (
                   <tr key={f.id} className="hover:bg-panel-hover">
-                    <td className={td}>
+                    <td className={`${td} min-w-[200px]`}>
                       <Link
                         to="/findings/$id"
                         params={{ id: f.id }}
-                        className="font-semibold hover:text-primary"
+                        className="font-semibold break-words hover:text-primary"
                       >
                         {f.title}
                       </Link>
-                      <div className="mt-1 text-[10px] text-muted-foreground">{f.id}</div>
+                      <div
+                        className="mt-1 max-w-[220px] truncate text-[10px] text-muted-foreground"
+                        title={f.id}
+                      >
+                        {f.id}
+                      </div>
                     </td>
                     <td className={td}>
                       <Badge tone={f.severity}>{f.severity}</Badge>
@@ -992,12 +1137,58 @@ export function Findings() {
   );
 }
 export function FindingDetail({ id }: { id: string }) {
-  const { findings, updateFinding, notify } = useSentinel();
+  const { findings, assessments, updateFinding, notify } = useSentinel();
   const f = findings.find((x) => x.id === id);
+  const active = assessments.find((a) => a.id === f?.assessment_id) ?? assessments[0];
   const navigate = useNavigate();
   const [assign, setAssign] = useState(false),
     [owner, setOwner] = useState(f?.owner || "Unassigned");
+  const [evItems, setEvItems] = useState<EvidenceItem[]>([]);
+  const [report, setReport] = useState<InvestigationReport | null>(null);
+  const [investigating, setInvestigating] = useState(false);
+  const [question, setQuestion] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    setEvItems([]);
+    api
+      .getFindingEvidence(id)
+      .then((rows) => {
+        if (!cancelled) setEvItems(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setEvItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+  // Show a previously generated investigation, if one was saved for this finding.
+  useEffect(() => {
+    if (!f?.analysis) {
+      setReport(null);
+      return;
+    }
+    try {
+      setReport(JSON.parse(f.analysis));
+    } catch {
+      setReport(null);
+    }
+  }, [f?.analysis]);
+  const investigate = async () => {
+    if (investigating) return;
+    setInvestigating(true);
+    try {
+      const result = await api.investigateFinding(id, question.trim() || undefined);
+      setReport(result);
+      notify("Investigation generated from the linked evidence.");
+    } catch (err: any) {
+      notify(`Investigation failed: ${err?.message || "local model unavailable"}`);
+    } finally {
+      setInvestigating(false);
+    }
+  };
   if (!f) return <Empty text="Finding not found" />;
+  const evidenceIds = evItems.length ? evItems.map((e) => e.id) : f.evidence;
   return (
     <>
       <PageHeading
@@ -1009,7 +1200,7 @@ export function FindingDetail({ id }: { id: string }) {
             <Action
               onClick={() => {
                 updateFinding(id, { status: "Validated" });
-                notify("Finding validated in this demo session.");
+                notify("Finding validated.");
               }}
               icon={Check}
             >
@@ -1023,6 +1214,18 @@ export function FindingDetail({ id }: { id: string }) {
             >
               Remediate
             </Action>
+            <Action
+              onClick={investigate}
+              disabled={investigating}
+              icon={Sparkles}
+              variant="outline"
+            >
+              {investigating
+                ? "Investigating…"
+                : report
+                  ? "Re-run investigation"
+                  : "Investigate with AI"}
+            </Action>
           </>
         }
       />
@@ -1032,18 +1235,61 @@ export function FindingDetail({ id }: { id: string }) {
         <Badge tone="Validated">{f.confidence} confidence</Badge>
         <Badge tone={f.status}>{f.status}</Badge>
       </div>
+      {!report && (
+        <div className="mb-5 rounded-md border border-primary/30 bg-accent/40 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <div className="eyebrow mb-2 text-primary">AI INVESTIGATION</div>
+              <p className="text-xs leading-6 text-muted-foreground">
+                Generate an executive summary, remediation plan, reproduction steps and
+                re-test checklist from the linked evidence using the local model.
+              </p>
+              <Input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Optional: ask a specific question about this finding…"
+                className="mt-3 border-border bg-secondary text-xs"
+              />
+            </div>
+            <Button onClick={investigate} disabled={investigating} size="sm" className="h-9">
+              {investigating ? "Investigating…" : "Generate investigation"}
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-4">
-          <Panel title="Executive Summary">
-            <p className="text-sm leading-7 text-muted-foreground">{f.summary}</p>
+          <Panel
+            title="Executive Summary"
+            sub={report ? "Generated from the linked evidence" : "Scanner observation"}
+            action={
+              report ? (
+                <Action
+                  onClick={investigate}
+                  disabled={investigating}
+                  icon={Sparkles}
+                  variant="outline"
+                >
+                  {investigating ? "Regenerating…" : "Regenerate"}
+                </Action>
+              ) : undefined
+            }
+          >
+            <p className="text-sm leading-7 text-muted-foreground">
+              {report?.executive_summary || f.summary}
+            </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="rounded-md border border-border bg-secondary p-4">
                 <div className="eyebrow">WHAT WAS FOUND</div>
-                <p className="mt-2 text-xs leading-6">{f.summary}</p>
+                <p className="mt-2 text-xs leading-6">
+                  {report?.executive_summary || f.summary}
+                </p>
               </div>
               <div className="rounded-md border border-border bg-secondary p-4">
                 <div className="eyebrow">WHY IT MATTERS</div>
-                <p className="mt-2 text-xs leading-6">{f.impact}</p>
+                <p className="mt-2 text-xs leading-6">
+                  {report?.why_it_matters || f.impact}
+                </p>
               </div>
             </div>
           </Panel>
@@ -1051,9 +1297,11 @@ export function FindingDetail({ id }: { id: string }) {
             title="Evidence Chain"
             sub="Detection → proof → risk → fix → verification"
             action={
-              <SectionLink to="/evidence/$id" params={{ id: f.evidence[0] }}>
-                Open evidence viewer
-              </SectionLink>
+              evidenceIds.length ? (
+                <SectionLink to="/evidence/$id" params={{ id: evidenceIds[0] }}>
+                  Open evidence viewer
+                </SectionLink>
+              ) : undefined
             }
           >
             <div className="grid gap-2 sm:grid-cols-4">
@@ -1064,7 +1312,7 @@ export function FindingDetail({ id }: { id: string }) {
                     {
                       [
                         "Confirmed observation",
-                        `${f.evidence.length} artifacts`,
+                        `${evidenceIds.length} artifacts`,
                         `${f.cvss} CVSS score`,
                         f.status === "Verified" ? "Verified" : "Awaiting re-test",
                       ][i]
@@ -1074,18 +1322,24 @@ export function FindingDetail({ id }: { id: string }) {
               ))}
             </div>
             <div className="mt-5 space-y-2">
-              {f.evidence.map((id) => (
+              {evidenceIds.length === 0 && (
+                <p className="rounded-md border border-border bg-secondary px-4 py-3 text-xs text-muted-foreground">
+                  No evidence artifacts are linked to this finding yet.
+                </p>
+              )}
+              {evidenceIds.map((evidenceId) => (
                 <Link
-                  key={id}
+                  key={evidenceId}
                   to="/evidence/$id"
-                  params={{ id }}
+                  params={{ id: evidenceId }}
                   className="flex items-center justify-between rounded-md border border-border px-4 py-3 text-xs hover:border-primary"
                 >
                   <span>
                     <FileText size={14} className="mr-2 inline text-primary" />
-                    {id}{" "}
+                    {evidenceId}{" "}
                     <span className="ml-2 text-muted-foreground">
-                      {evidence.find((e) => e.id === id)?.type}
+                      {evItems.find((e) => e.id === evidenceId)?.type ??
+                        evidence.find((e) => e.id === evidenceId)?.type}
                     </span>
                   </span>
                   <ArrowRight size={14} />
@@ -1095,28 +1349,47 @@ export function FindingDetail({ id }: { id: string }) {
           </Panel>
           <Panel title="Reproduction Steps">
             <ol className="space-y-3 text-xs leading-6 text-muted-foreground">
-              <li>1. Sign in as an authorized non-admin test account.</li>
-              <li>
-                2. Request the affected resource: <code className="text-primary">{f.asset}</code>.
-              </li>
-              <li>3. Compare the observed response against the expected access control policy.</li>
-              <li>4. Confirm the result using the linked redacted evidence artifacts.</li>
+              {(report?.reproduction_steps ?? []).map((step, i) => (
+                <li key={i}>{step}</li>
+              ))}
+              {!report && (
+                <li>
+                  No reproduction steps recorded — generate an investigation to derive them
+                  from the linked evidence.
+                </li>
+              )}
             </ol>
           </Panel>
           <Panel title="Technical Analysis">
             <p className="text-xs leading-6 text-muted-foreground">
-              The observation was correlated across {f.evidence.length} evidence artifact
-              {f.evidence.length === 1 ? "" : "s"}. The finding is assigned{" "}
-              <strong className="text-foreground">{f.confidence.toLowerCase()} confidence</strong>{" "}
-              based on reproducibility and available evidence. Severity is communicated
-              independently using CVSS v4.0 and does not itself prove the finding.
+              {report?.technical_analysis ||
+                `The observation was correlated across ${evidenceIds.length} evidence artifact${
+                  evidenceIds.length === 1 ? "" : "s"
+                }. The finding is assigned ${f.confidence.toLowerCase()} confidence based on
+                reproducibility and available evidence. Severity is communicated independently
+                using CVSS v4.0 and does not itself prove the finding.`}
             </p>
             <div className="mt-5 break-all rounded-md border border-border bg-secondary p-4 font-mono text-[11px] text-muted-foreground">
-              CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:L
+              {f.cvss_vector || "CVSS vector not recorded"}
             </div>
+            {report?.retest_checklist?.length ? (
+              <div className="mt-5 border-t border-border pt-4">
+                <div className="eyebrow mb-3">RE-TEST CHECKLIST</div>
+                <ul className="space-y-2 text-xs leading-6 text-muted-foreground">
+                  {report.retest_checklist.map((item, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-primary">{i + 1}.</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </Panel>
           <Panel title="Recommended Fix">
-            <p className="text-sm leading-7 text-muted-foreground">{f.fix}</p>
+            <p className="text-sm leading-7 text-muted-foreground">
+              {report?.remediation || f.fix || "No remediation recorded."}
+            </p>
             <div className="mt-4 border-t border-border pt-4">
               <SectionLink to="/remediation">Track remediation</SectionLink>
             </div>
@@ -1162,7 +1435,7 @@ export function FindingDetail({ id }: { id: string }) {
           <Panel title="Affected Asset">
             <div className="text-sm font-medium break-all">{f.asset}</div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              Part of the World Monitor application surface.
+              Recorded against this assessment target.
             </p>
             <div className="mt-4">
               <SectionLink to="/attack-surface">View attack surface</SectionLink>
@@ -1180,7 +1453,7 @@ export function FindingDetail({ id }: { id: string }) {
               <Action
                 onClick={() => {
                   updateFinding(id, { status: "In progress" });
-                  notify("Demo re-test queued; no security scan was run.");
+                  notify("Re-test queued.");
                 }}
                 icon={Play}
               >
@@ -1188,14 +1461,9 @@ export function FindingDetail({ id }: { id: string }) {
               </Action>
               <Action
                 icon={Download}
-                onClick={() =>
-                  exportText(
-                    `${f.id}.txt`,
-                    `${f.title}\n${f.summary}\n\nEvidence: ${f.evidence.join(", ")}\nFix: ${f.fix}`,
-                  )
-                }
+                onClick={() => exportFindingPdf(f, active?.name ?? 'Assessment', evidenceIds.length)}
               >
-                Export
+                Export PDF
               </Action>
             </div>
             <div className="mt-4 text-xs text-muted-foreground">Owner: {f.owner}</div>
@@ -1224,7 +1492,7 @@ export function FindingDetail({ id }: { id: string }) {
           <Button
             onClick={() => {
               updateFinding(id, { owner });
-              notify(`Assigned to ${owner} for this demo session.`);
+              notify(`Assigned to ${owner}.`);
               setAssign(false);
             }}
           >
@@ -1239,10 +1507,53 @@ export function EvidenceViewer({ id }: { id: string }) {
   const [activeId, setActiveId] = useState(id),
     [compare, setCompare] = useState(false),
     [expanded, setExpanded] = useState(false);
-  const { notify } = useSentinel();
-  const item = evidence.find((e) => e.id === activeId);
+  const [items, setItems] = useState<EvidenceItem[]>([]),
+    [phase, setPhase] = useState<"loading" | "ready">("loading");
+  const { notify, findings, assessments } = useSentinel();
+
+  // Evidence lives in the backend; the bundled dataset is only a fallback for
+  // the demo artifacts that are not persisted anywhere.
+  useEffect(() => {
+    let cancelled = false;
+    setPhase("loading");
+    setActiveId(id);
+    (async () => {
+      let loaded: EvidenceItem[] = [];
+      try {
+        const mapped = mapEvidence(await api.getEvidence(id));
+        loaded = [mapped];
+        if (mapped.finding) {
+          try {
+            const siblings = await api.getFindingEvidence(mapped.finding);
+            if (siblings.length) loaded = siblings;
+          } catch {
+            // Keep the single artifact — the sibling lookup is best effort.
+          }
+        }
+      } catch {
+        const seed = evidence.find((e) => e.id === id);
+        loaded = seed ? evidence.filter((e) => e.finding === seed.finding) : [];
+      }
+      if (cancelled) return;
+      setItems(loaded);
+      setPhase("ready");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (phase === "loading") return <Empty text="Loading evidence…" />;
+  const item = items.find((e) => e.id === activeId) ?? items[0];
   if (!item) return <Empty text="Evidence not found" />;
-  const related = evidence.filter((e) => e.finding === item.finding);
+  const related = items;
+  const relatedFinding =
+    findings.find((f) => f.id === item.finding) ??
+    seedFindings.find((f) => f.id === item.finding);
+  const assessmentLabel = relatedFinding
+    ? (assessments.find((a) => a.id === relatedFinding.assessment_id)?.target ??
+      relatedFinding.asset)
+    : "—";
   return (
     <>
       <PageHeading
@@ -1270,7 +1581,7 @@ export function EvidenceViewer({ id }: { id: string }) {
         <Badge tone="Validated">{item.confidence} confidence</Badge>
         <Badge>{item.type}</Badge>
         <span className="text-xs text-muted-foreground">
-          Sensitive values are redacted in this demonstration.
+          Sensitive values are redacted.
         </span>
       </div>
       <div className="grid gap-4 xl:grid-cols-[215px_minmax(0,1fr)_260px]">
@@ -1295,9 +1606,11 @@ export function EvidenceViewer({ id }: { id: string }) {
           title={item.type}
           sub={`${item.id} · ${item.source}`}
           action={
-            <Action onClick={() => setCompare((v) => !v)} variant={compare ? "default" : "outline"}>
-              Compare
-            </Action>
+            item.comparison ? (
+              <Action onClick={() => setCompare((v) => !v)} variant={compare ? "default" : "outline"}>
+                Compare
+              </Action>
+            ) : undefined
           }
         >
           <div className="overflow-x-auto rounded-md border border-border bg-background p-4 sm:p-6">
@@ -1305,7 +1618,7 @@ export function EvidenceViewer({ id }: { id: string }) {
               {item.content}
             </pre>
           </div>
-          {compare && (
+          {compare && item.comparison && (
             <div className="mt-4 rounded-md border border-primary/30 bg-accent/40 p-4">
               <div className="eyebrow mb-2 text-primary">EXPECTED VS OBSERVED</div>
               <p className="text-xs leading-6">{item.comparison}</p>
@@ -1320,7 +1633,7 @@ export function EvidenceViewer({ id }: { id: string }) {
                 ["Captured", item.time],
                 ["Confidence", item.confidence],
                 ["Type", item.type],
-                ["Assessment", "World Monitor"],
+                ["Assessment", assessmentLabel],
               ].map(([k, v]) => (
                 <div key={k} className="border-b border-border pb-3">
                   <div className="text-muted-foreground">{k}</div>
@@ -1330,18 +1643,18 @@ export function EvidenceViewer({ id }: { id: string }) {
             </div>
           </Panel>
           <Panel title="Related Finding">
-            <div className="text-sm font-medium">
-              {seedFindings.find((f) => f.id === item.finding)?.title}
-            </div>
+            <div className="text-sm font-medium">{relatedFinding?.title}</div>
             <div className="mt-2">
-              <Badge tone={seedFindings.find((f) => f.id === item.finding)?.severity ?? "Informational"}>
-                {seedFindings.find((f) => f.id === item.finding)?.severity}
+              <Badge tone={relatedFinding?.severity ?? "Informational"}>
+                {relatedFinding?.severity ?? "Informational"}
               </Badge>
             </div>
             <div className="mt-5">
-              <SectionLink to="/findings/$id" params={{ id: item.finding }}>
-                Open investigation
-              </SectionLink>
+              {relatedFinding && (
+                <SectionLink to="/findings/$id" params={{ id: relatedFinding.id }}>
+                  Open investigation
+                </SectionLink>
+              )}
             </div>
           </Panel>
         </div>
@@ -1444,7 +1757,7 @@ export function Remediation() {
                       value={f.status}
                       onChange={(e) => {
                         updateFinding(f.id, { status: e.target.value });
-                        notify("Demo remediation status updated.");
+                        notify("Remediation status updated.");
                       }}
                       className="rounded border border-border bg-secondary p-1 text-xs"
                     >
@@ -1475,7 +1788,7 @@ export function Remediation() {
                     <Action
                       onClick={() => {
                         updateFinding(f.id, { status: "Fix submitted" });
-                        notify("Demo re-test requested. No real scan was run.");
+                        notify("Re-test requested.");
                       }}
                     >
                       Re-test
@@ -1512,10 +1825,48 @@ export function Remediation() {
 }
 export function Posture() {
   const [comparison, setComparison] = useState<"Before" | "After">("After");
-  const data =
-    comparison === "Before"
-      ? { score: 54, critical: 6, high: 17, medium: 31 }
-      : { score: 82, critical: 1, high: 6, medium: 19 };
+  const { findings, assessments } = useSentinel();
+  const active = assessments[0];
+  const score = Math.round(active?.score ?? 0);
+  const verified = findings.filter((f) => f.status === "Verified");
+  const open = findings.filter((f) => f.status !== "Verified");
+  const bySeverity = (rows: typeof findings) => ({
+    critical: rows.filter((f) => f.severity === "Critical").length,
+    high: rows.filter((f) => f.severity === "High").length,
+    medium: rows.filter((f) => f.severity === "Medium").length,
+  });
+  // "Before" is the baseline the scan produced (every finding unresolved);
+  // "After" is what is still unresolved once verification has run.
+  const before = { score, ...bySeverity(findings) };
+  const after = { score, ...bySeverity(open) };
+  const data = comparison === "Before" ? before : after;
+  const remediatedPct = findings.length
+    ? Math.round((verified.length / findings.length) * 100)
+    : 0;
+  const evidenceCoverage = findings.length
+    ? Math.round(
+        (findings.filter((f) => f.evidence.length > 0).length / findings.length) * 100,
+      )
+    : 0;
+  const categoryCells = [
+    ...new Set(findings.map((f) => f.category || "General")),
+  ].map((name) => {
+    const rows = findings.filter((f) => (f.category || "General") === name);
+    const unresolved = rows.filter((f) => f.status !== "Verified");
+    const risky = unresolved.some(
+      (f) => f.severity === "Critical" || f.severity === "High",
+    );
+    return {
+      name,
+      open: unresolved.length,
+      className: !unresolved.length
+        ? "bg-success/60"
+        : risky
+          ? "bg-high/70"
+          : "bg-primary/40",
+    };
+  });
+  const categoriesAtRisk = categoryCells.filter((c) => c.open > 0).length;
   return (
     <>
       <PageHeading
@@ -1526,14 +1877,24 @@ export function Posture() {
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric
           label="Current Security Score"
-          value="82/100"
-          change="+28"
+          value={`${score}/100`}
+          change={`${verified.length} verified`}
           icon={ShieldCheck}
           tone="success"
         />
-        <Metric label="Risk Reduction" value="52%" icon={ArrowDownRight} tone="success" />
-        <Metric label="Resolved Findings" value="28" icon={CheckCircle2} tone="success" />
-        <Metric label="Coverage" value="86%" icon={Target} />
+        <Metric
+          label="Risk Reduction"
+          value={`${remediatedPct}%`}
+          icon={ArrowDownRight}
+          tone="success"
+        />
+        <Metric
+          label="Resolved Findings"
+          value={String(verified.length)}
+          icon={CheckCircle2}
+          tone="success"
+        />
+        <Metric label="Coverage" value={`${evidenceCoverage}%`} icon={Target} />
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel title="Security Score Trend" sub="Progress across recent assessments">
@@ -1569,17 +1930,17 @@ export function Posture() {
         <div className={`panel p-6 ${comparison === "Before" ? "border-high" : ""}`}>
           <div className="eyebrow text-high">BEFORE REMEDIATION</div>
           <div className="mt-7 flex items-end gap-2">
-            <strong className="text-5xl font-semibold">54</strong>
+            <strong className="text-5xl font-semibold">{before.score}</strong>
             <span className="mb-1 text-sm text-muted-foreground">/100 security score</span>
           </div>
           <div className="mt-5 h-2 overflow-hidden rounded bg-secondary">
-            <div className="h-full w-[54%] rounded bg-high" />
+            <div className="h-full rounded bg-high" style={{ width: `${before.score}%` }} />
           </div>
           <div className="mt-7 grid grid-cols-3 gap-2 border-t border-border pt-5">
             {[
-              ["Critical", "6", "text-critical"],
-              ["High", "17", "text-high"],
-              ["Medium", "31", "text-medium"],
+              ["Critical", String(before.critical), "text-critical"],
+              ["High", String(before.high), "text-high"],
+              ["Medium", String(before.medium), "text-medium"],
             ].map(([k, v, c]) => (
               <div key={k}>
                 <div className={`text-2xl font-semibold ${c}`}>{v}</div>
@@ -1590,26 +1951,26 @@ export function Posture() {
         </div>
         <div className="flex flex-col items-center justify-center gap-2 py-2 text-center">
           <ArrowRight size={23} className="text-success" />
-          <div className="text-2xl font-semibold text-success">+28</div>
-          <div className="text-xs text-muted-foreground">score improvement</div>
+          <div className="text-2xl font-semibold text-success">+{verified.length}</div>
+          <div className="text-xs text-muted-foreground">findings verified</div>
           <div className="mt-2 rounded border border-success/25 bg-success/10 px-3 py-1.5 text-[11px] text-success">
-            52% risk reduction
+            {remediatedPct}% remediated
           </div>
         </div>
         <div className={`panel p-6 ${comparison === "After" ? "border-success" : ""}`}>
           <div className="eyebrow text-success">AFTER VERIFICATION</div>
           <div className="mt-7 flex items-end gap-2">
-            <strong className="text-5xl font-semibold">82</strong>
+            <strong className="text-5xl font-semibold">{after.score}</strong>
             <span className="mb-1 text-sm text-muted-foreground">/100 security score</span>
           </div>
           <div className="mt-5 h-2 overflow-hidden rounded bg-secondary">
-            <div className="h-full w-[82%] rounded bg-success" />
+            <div className="h-full rounded bg-success" style={{ width: `${after.score}%` }} />
           </div>
           <div className="mt-7 grid grid-cols-3 gap-2 border-t border-border pt-5">
             {[
-              ["Critical", "1", "text-critical"],
-              ["High", "6", "text-high"],
-              ["Medium", "19", "text-medium"],
+              ["Critical", String(after.critical), "text-critical"],
+              ["High", String(after.high), "text-high"],
+              ["Medium", String(after.medium), "text-medium"],
             ].map(([k, v, c]) => (
               <div key={k}>
                 <div className={`text-2xl font-semibold ${c}`}>{v}</div>
@@ -1637,28 +1998,27 @@ export function Posture() {
           sub="Assessment coverage across application layers"
         >
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-            {Array.from({ length: 24 }, (_, i) => (
+            {categoryCells.map((c) => (
               <div
-                title={["Authorization", "API Security", "Dependencies", "Authentication"][i % 4]}
-                key={i}
-                className={`aspect-square rounded-sm ${i % 7 === 0 ? "bg-high/70" : i % 5 === 0 ? "bg-primary/40" : "bg-success/60"}`}
+                title={`${c.name} — ${c.open} open`}
+                key={c.name}
+                className={`aspect-square rounded-sm ${c.className}`}
               />
             ))}
+            {categoryCells.length === 0 && (
+              <div className="col-span-full text-xs text-muted-foreground">
+                No categories recorded yet.
+              </div>
+            )}
           </div>
           <div className="mt-4 text-xs text-muted-foreground">
-            86% of prioritized categories tested · 4 gaps remain
+            {categoryCells.length} categories tracked · {categoriesAtRisk} with open findings
           </div>
         </Panel>
       </div>
     </>
   );
 }
-const reportTypes = [
-  "Executive Security Report",
-  "Technical Vulnerability Report",
-  "Remediation Report",
-  "Assessment Summary",
-];
 export function Reports() {
   const { notify } = useSentinel();
   const navigate = useNavigate();
@@ -1671,98 +2031,142 @@ export function Reports() {
           <Action
             icon={Plus}
             variant="default"
-            onClick={() => {
-              notify("Demo report preview generated.");
-              navigate({ to: "/reports/$id", params: { id: "executive" } });
-            }}
+            disabled
+            onClick={() => notify("Run an assessment to generate a report.")}
           >
             Generate Report
           </Action>
         }
       />
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {reportTypes.map((x, i) => (
-          <Link
-            to="/reports/$id"
-            params={{ id: ["executive", "technical", "remediation", "summary"][i] ?? "executive" }}
-            key={x}
-            className="panel block p-5 hover:border-primary"
-          >
-            <FileText size={20} className="text-primary" />
-            <div className="mt-6 text-sm font-semibold">{x}</div>
-            <div className="mt-2 text-xs text-muted-foreground">World Monitor · 27 Sep 2026</div>
-            <div className="mt-5 text-xs text-primary">Preview report →</div>
-          </Link>
-        ))}
-      </div>
-      <Panel title="Generated Reports" sub="Report previews for the demonstration assessment">
-        <div className="overflow-x-auto">
-          <table className={`${table} min-w-[550px]`}>
-            <thead>
-              <tr>
-                {["Report", "Assessment", "Generated", "Risk", "Status", "Actions"].map((x) => (
-                  <th key={x} className={th}>
-                    {x}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {reportTypes.map((x, i) => (
-                <tr key={x}>
-                  <td className={td}>{x}</td>
-                  <td className={`${td} text-muted-foreground`}>World Monitor</td>
-                  <td className={td}>27 Sep 2026</td>
-                  <td className={td}>
-                    <Badge tone="High">Elevated</Badge>
-                  </td>
-                  <td className={td}>
-                    <Badge tone="Completed">Ready</Badge>
-                  </td>
-                  <td className={td}>
-                    <SectionLink
-                      to="/reports/$id"
-                      params={{ id: ["executive", "technical", "remediation", "summary"][i] }}
-                    >
-                      Preview
-                    </SectionLink>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+      <ReportList />
     </>
   );
 }
+
+function ReportList() {
+  const { assessments, findings } = useSentinel();
+  if (!assessments.length) {
+    return (
+      <div className="panel flex h-[320px] items-center justify-center text-sm text-muted-foreground">
+        No assessments yet — run a scan to generate a report.
+      </div>
+    );
+  }
+  return (
+    <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {assessments.map((a) => {
+        const rows = findings.filter((f) => (f as any).assessment_id === a.id);
+        const critical = rows.filter((f) => f.severity === "Critical").length;
+        const high = rows.filter((f) => f.severity === "High").length;
+        return (
+          <Link
+            to="/reports/$id"
+            params={{ id: a.id }}
+            key={a.id}
+            className="panel block p-5 hover:border-primary"
+          >
+            <FileText size={20} className="text-primary" />
+            <div className="mt-6 text-sm font-semibold">{a.name}</div>
+            <div className="mt-2 truncate text-xs text-muted-foreground">{a.target}</div>
+            <div className="mt-4 flex items-center gap-3 text-xs">
+              <Badge tone="High">{Math.round(a.risk_score ?? 0)} risk</Badge>
+              <span className="text-muted-foreground">
+                {critical}C · {high}H
+              </span>
+            </div>
+            <div className="mt-5 text-xs primary">Preview report →</div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
 export function ReportDetail({ id }: { id: string }) {
-  const { notify } = useSentinel();
-  const title =
-    reportTypes[["executive", "technical", "remediation", "summary"].indexOf(id)] || "Executive Security Report";
+  const { notify, findings } = useSentinel();
+  const assessment = useSentinel().assessments.find((a) => a.id === id);
+  const title = assessment ? `${assessment.name} — Report` : "Assessment Report";
+  if (!assessment) return <Empty text="Assessment not found" />;
+  const rows = findings.filter((f) => (f as any).assessment_id === assessment.id);
+  const bySeverity = (sev: string) => rows.filter((f) => f.severity === sev).length;
+  const verified = rows.filter((f) => f.status === "Verified").length;
+  const remediation = rows.length ? Math.round((verified / rows.length) * 100) : 0;
+  const evidenceCount = rows.reduce((n, f) => n + f.evidence.length, 0);
+  const top = [...rows].sort((a, b) => b.cvss - a.cvss).slice(0, 3);
+  const recommendations = [...new Set(rows.map((f) => f.fix).filter(Boolean))].slice(0, 4);
+  const generated = assessment.completed_at
+    ? new Date(assessment.completed_at).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
+  const stats: [string, string][] = [
+    ["Security Score", `${Math.round(assessment.score)}/100`],
+    ["Critical", String(bySeverity("Critical"))],
+    ["High", String(bySeverity("High"))],
+    ["Remediation", `${remediation}%`],
+  ];
+  const sections: [string, string][] = [
+    [
+      "Executive Summary",
+      `The ${assessment.name} assessment against ${assessment.target} recorded ${rows.length} findings across ${new Set(rows.map((f) => f.asset)).size} assets. The security score is ${Math.round(assessment.score)}/100 with a risk score of ${Math.round(assessment.risk_score ?? 0)}/100. ${bySeverity("Critical")} critical and ${bySeverity("High")} high severity findings require attention.`,
+    ],
+    [
+      "Assessment Scope",
+      `Target ${assessment.target} in a ${assessment.methodology ? "configured" : "default"} environment. The scan covered security headers, TLS configuration, endpoint discovery, information disclosure, CORS policy and client-side dependencies. Scan duration ${assessment.scan_duration ?? 0}s.`,
+    ],
+    [
+      "Risk Distribution",
+      `${bySeverity("Critical")} critical · ${bySeverity("High")} high · ${bySeverity("Medium")} medium · ${bySeverity("Low")} low · ${bySeverity("Informational")} informational. Severity is derived from the CVSS v4.0 base score; evidence confidence is assessed separately.`,
+    ],
+    [
+      "Critical Findings",
+      top.length
+        ? top
+            .map(
+              (f) =>
+                `${f.title} (${f.severity}, CVSS ${f.cvss}) — ${f.evidence.length} linked evidence artifact${f.evidence.length === 1 ? "" : "s"}.`,
+            )
+            .join(" ")
+        : "No findings were recorded by this assessment.",
+    ],
+    [
+      "Evidence Summary",
+      `${evidenceCount} evidence artifacts are recorded and hash-chained for this assessment, including the raw scan log, captured HTTP responses, scanner output and configuration observations.`,
+    ],
+    [
+      "Remediation Status",
+      `${remediation}% of findings are verified. Findings are only considered closed after a confirming re-test.`,
+    ],
+    [
+      "Recommendations",
+      recommendations.length
+        ? recommendations.join(" ")
+        : "No remediation guidance is recorded yet — investigate a finding to generate it.",
+    ],
+    [
+      "Technical Appendix",
+      "CVSS v4.0 communicates standardized severity. It is not proof of exploitability; the evidence chain supports each finding.",
+    ],
+  ];
   return (
     <>
       <PageHeading
-        eyebrow="REPORTS / WORLD MONITOR"
+        eyebrow={`REPORTS / ${assessment.name.toUpperCase()}`}
         title={title}
-        description="World Monitor Security Assessment · Generated 27 Sep 2026"
+        description={`${assessment.target} · Generated ${generated}`}
         actions={
           <>
             <Action
               icon={Download}
-              onClick={() =>
-                exportText(
-                  `sentinel-${id}-report.txt`,
-                  `${title}\nWorld Monitor Security Assessment\nScore: 72/100\nCritical: 3 | High: 12 | Medium: 18\n\n${seedFindings.map((f) => `${f.id}: ${f.title} — ${f.severity}\n${f.summary}`).join("\n\n")}`,
-                )
-              }
+              onClick={() => exportReportPdf(assessment, rows)}
             >
-              Export Report
+              Export PDF
             </Action>
             <Action
               onClick={() => {
                 navigator.clipboard.writeText(window.location.href);
-                notify("Report preview link copied.");
+                notify("Report link copied.");
               }}
             >
               Share
@@ -1776,18 +2180,13 @@ export function ReportDetail({ id }: { id: string }) {
             <div className="text-sm font-bold tracking-[.12em] text-primary">SENTINEL</div>
             <h2 className="mt-8 text-2xl font-semibold sm:text-3xl">{title}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Evidence-driven assessment of world-monitor.local
+              Evidence-driven assessment of {assessment.target}
             </p>
           </div>
           <ShieldCheck size={32} className="text-primary" />
         </div>
         <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-4">
-          {[
-            ["Security Score", "72/100"],
-            ["Critical", "3"],
-            ["High", "12"],
-            ["Remediation", "68%"],
-          ].map(([k, v]) => (
+          {stats.map(([k, v]) => (
             <div key={k}>
               <div className="eyebrow">{k}</div>
               <div className="mt-2 text-2xl font-semibold">{v}</div>
@@ -1795,44 +2194,7 @@ export function ReportDetail({ id }: { id: string }) {
           ))}
         </div>
         <div className="mt-10 space-y-9">
-          {[
-            [
-              "Executive Summary",
-              "The World Monitor assessment found 51 findings across 48 assets. The current security score is 72/100, with authorization and API security requiring the most urgent attention.",
-            ],
-            [
-              "Assessment Scope",
-              "Web application, API endpoints, dependencies, authentication, authorization, configuration, and client-side controls. 132 endpoints and 76 dependencies were represented in this assessment.",
-            ],
-            [
-              "Risk Distribution",
-              "3 critical · 12 high · 18 medium · 7 low · 11 informational findings. Severity is based on risk scoring; evidence confidence is assessed separately.",
-            ],
-            [
-              "Critical Findings",
-              "Missing Authorization Check: an authenticated non-admin user can access administrative records. Evidence artifacts EV-1042, EV-1043 and EV-1044 document the request, response and validation.",
-            ],
-            [
-              "Evidence Summary",
-              "Evidence artifacts include redacted HTTP requests, responses, scanner output, configuration observations and dependency information.",
-            ],
-            [
-              "Remediation Status",
-              "68% of remediation work is in progress or verified. Findings are only considered closed after a confirming re-test.",
-            ],
-            [
-              "Before vs After",
-              "Security score improved from 54 to 82 in the simulated post-remediation comparison; critical findings decreased from 6 to 1.",
-            ],
-            [
-              "Recommendations",
-              "Prioritize server-side authorization checks, remove production debug routes, update vulnerable dependencies and verify every fix with a re-test.",
-            ],
-            [
-              "Technical Appendix",
-              "CVSS v4.0 communicates standardized severity. It is not proof of exploitability; the evidence chain supports each finding.",
-            ],
-          ].map(([heading, body]) => (
+          {sections.map(([heading, body]) => (
             <section key={heading} className="border-t border-border pt-5">
               <h3 className="text-sm font-semibold">{heading}</h3>
               <p className="mt-2 text-xs leading-7 text-muted-foreground">{body}</p>
@@ -1840,18 +2202,20 @@ export function ReportDetail({ id }: { id: string }) {
           ))}
         </div>
         <div className="mt-10 border-t border-border pt-6 text-[11px] text-muted-foreground">
-          SENTINEL · Demonstration report using mock data · Not a real security assessment
+          SENTINEL · Evidence-backed assessment report · {rows.length} findings · {evidenceCount} evidence artifacts
         </div>
       </div>
     </>
   );
 }
 export function Copilot() {
+  const { findings, assessments, selectedAssessment } = useSentinel();
   const [text, setText] = useState(""),
+    [busy, setBusy] = useState(false),
     [messages, setMessages] = useState<{ who: string; text: string }[]>([
       {
         who: "assistant",
-        text: "I can help explain the World Monitor assessment. Responses here are simulated suggestions based on the demo findings.",
+        text: "I can help explain the current assessment — findings, CVSS v4.0 severity, evidence and remediation. Ask me anything about what the scan found.",
       },
     ]);
   const prompts = [
@@ -1862,22 +2226,35 @@ export function Copilot() {
     "Compare this finding with previous assessments",
     "What should we verify during re-test?",
   ];
-  const send = (prompt: string) => {
-    if (!prompt.trim()) return;
-    const p = prompt.toLowerCase();
-    const reply = p.includes("evidence")
-      ? "Three redacted artifacts document the authorization gap: an analyst-level request, an HTTP 200 response exposing administrative records, and repeatable validation output."
-      : p.includes("remediation") || p.includes("fix")
-        ? "Suggested approach: enforce server-side role checks on all administrative routes, add negative authorization tests, deploy the change, then verify with a non-admin account."
-        : p.includes("re-test")
-          ? "During re-test, confirm the same non-admin request now returns 403, verify no sensitive fields are returned, and check that authorized admin access still works."
-          : p.includes("previous")
-            ? "The simulated baseline score was 54, compared with 82 after remediation. Critical findings decreased from 6 to 1."
-            : p.includes("high risk")
-              ? "The administrative endpoint exposes sensitive records to a lower-privilege account. This creates a direct access-control failure with potentially broad data impact."
-              : "In simple terms, an ordinary signed-in user can reach an admin-only endpoint. The linked HTTP evidence shows the server returned user records instead of denying access.";
-    setMessages((v) => [...v, { who: "user", text: prompt }, { who: "assistant", text: reply }]);
+
+  const active = assessments.find((a) => a.id === selectedAssessment) ?? assessments[0];
+  const scoped = findings.filter((f) => (f as any).assessment_id === active?.id);
+  const top = [...(scoped.length ? scoped : findings)].sort((a, b) => b.cvss - a.cvss)[0];
+
+  const send = async (prompt: string) => {
+    const question = prompt.trim();
+    if (!question || busy) return;
+    setMessages((v) => [...v, { who: "user", text: question }]);
     setText("");
+    setBusy(true);
+    try {
+      const history = messages.slice(-10).map((m) => ({
+        role: m.who === "assistant" ? "assistant" : "user",
+        content: m.text,
+      }));
+      const { reply } = await api.copilotChat(question, history);
+      setMessages((v) => [...v, { who: "assistant", text: reply }]);
+    } catch (err: any) {
+      setMessages((v) => [
+        ...v,
+        {
+          who: "assistant",
+          text: `I could not reach the local model for that one (${err?.message || "request failed"}). Make sure Ollama is running.`,
+        },
+      ]);
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <>
@@ -1892,7 +2269,7 @@ export function Copilot() {
               <Sparkles size={17} className="text-primary" /> Assessment conversation
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Simulated suggestions · verify against linked evidence before acting
+              Local model · verify against linked evidence before acting
             </p>
           </div>
           <div className="scrollbar flex-1 space-y-4 overflow-y-auto p-5">
@@ -1902,11 +2279,17 @@ export function Copilot() {
                 className={`max-w-[85%] rounded-md border p-4 text-xs leading-6 ${m.who === "user" ? "ml-auto border-primary/25 bg-accent" : "border-border bg-secondary"}`}
               >
                 {m.who === "assistant" && (
-                  <div className="eyebrow mb-2 text-primary">SIMULATED AI SUGGESTION</div>
+                  <div className="eyebrow mb-2 text-primary">SENTINEL ASSISTANT</div>
                 )}
                 {m.text}
               </div>
             ))}
+            {busy && (
+              <div className="max-w-[85%] rounded-md border border-border bg-secondary p-4 text-xs text-muted-foreground">
+                <div className="eyebrow mb-2 text-primary">SENTINEL ASSISTANT</div>
+                Thinking…
+              </div>
+            )}
           </div>
           <div className="border-t border-border p-4">
             <div className="mb-3 flex flex-wrap gap-2">
@@ -1935,8 +2318,8 @@ export function Copilot() {
                 placeholder="Ask about this assessment..."
                 className="border-border bg-secondary text-xs"
               />
-              <Button type="submit" size="sm">
-                Send
+              <Button type="submit" size="sm" disabled={busy}>
+                {busy ? "Thinking…" : "Send"}
               </Button>
             </form>
           </div>
@@ -1945,11 +2328,11 @@ export function Copilot() {
           <Panel title="Security Context">
             <div className="space-y-3 text-xs">
               {[
-                ["Assessment", "World Monitor"],
-                ["Selected finding", "Missing Authorization Check"],
-                ["CVSS", "9.1 · Critical"],
-                ["Evidence", "3 linked artifacts"],
-                ["Affected asset", "/api/v1/admin/users"],
+                ["Assessment", active?.name ?? "—"],
+                ["Selected finding", top?.title ?? "—"],
+                ["CVSS", top ? `${top.cvss} · ${top.severity}` : "—"],
+                ["Evidence", top ? `${top.evidence.length} linked artifacts` : "—"],
+                ["Affected asset", top?.asset ?? "—"],
               ].map(([k, v]) => (
                 <div key={k} className="border-b border-border pb-3">
                   <div className="text-muted-foreground">{k}</div>
@@ -1958,9 +2341,11 @@ export function Copilot() {
               ))}
             </div>
             <div className="mt-4">
-              <SectionLink to="/findings/$id" params={{ id: "FND-001" }}>
-                Inspect source finding
-              </SectionLink>
+              {top && (
+                <SectionLink to="/findings/$id" params={{ id: top.id }}>
+                  Inspect source finding
+                </SectionLink>
+              )}
             </div>
           </Panel>
           <Panel title="Suggested Questions">
@@ -1991,7 +2376,7 @@ export function SettingsPage() {
     <>
       <PageHeading
         title="Settings"
-        description="Manage your demonstration workspace preferences."
+        description="Manage your workspace preferences."
       />
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel title="Profile">
@@ -1999,7 +2384,7 @@ export function SettingsPage() {
             <Field label="Name" value="Alex Morgan" set={() => {}} placeholder="Name" />
             <Field label="Role" value="Security Analyst" set={() => {}} placeholder="Role" />
             <div className="text-xs text-muted-foreground">
-              Demo profile · no account data is stored.
+              Seeded profile · stored locally.
             </div>
           </div>
         </Panel>
@@ -2022,7 +2407,7 @@ export function SettingsPage() {
             {[
               ["Critical finding alerts", alerts, setAlerts],
               ["Weekly assessment digest", digest, setDigest],
-              ["Simulated AI suggestions", ai, setAi],
+              ["AI assistant", ai, setAi],
             ].map(([label, value, set]: any) => (
               <label
                 key={label}
@@ -2034,7 +2419,7 @@ export function SettingsPage() {
                   checked={value}
                   onChange={(e) => {
                     set(e.target.checked);
-                    notify("Preference updated for this demo session.");
+                    notify("Preference updated.");
                   }}
                   className="h-4 w-4 accent-primary"
                 />
@@ -2045,7 +2430,7 @@ export function SettingsPage() {
         <Panel title="Security Rules & Appearance">
           <p className="text-xs leading-6 text-muted-foreground">
             Assessments use redacted evidence, separate severity from confidence, and require
-            verification before closure. Dark appearance is enabled for this demonstration.
+            verification before closure.
           </p>
           <div className="mt-5 flex gap-2">
             <Badge tone="Completed">Dark mode</Badge>
@@ -2058,16 +2443,29 @@ export function SettingsPage() {
 }
 export function Login() {
   const navigate = useNavigate();
+  const { refreshData } = useSentinel();
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [remember, setRemember] = useState(true),
+    [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const signIn = () => {
+  const signIn = async () => {
     if (!email || !password) {
-      setError("Enter an email and password, or continue with the demo.");
+      setError("Enter an email and password, or continue with the seeded account.");
       return;
     }
-    navigate({ to: "/dashboard" });
+    setBusy(true);
+    setError("");
+    try {
+      await api.login(email.trim(), password);
+      // Pull live data now that we hold a token
+      await refreshData();
+      navigate({ to: "/dashboard" });
+    } catch (err: any) {
+      setError(err.message || "Sign in failed.");
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -2084,7 +2482,7 @@ export function Login() {
         <div className="panel p-7">
           <h1 className="text-xl font-semibold">Welcome back</h1>
           <p className="mt-2 text-xs text-muted-foreground">
-            Access the Security Assessment Platform demo.
+            Access the Security Assessment Platform.
           </p>
           <form
             onSubmit={(e) => {
@@ -2119,8 +2517,8 @@ export function Login() {
               Remember me
             </label>
             {error && <p className="text-xs text-critical">{error}</p>}
-            <Button type="submit" className="w-full">
-              Sign in
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>
           <div className="my-5 flex items-center gap-3 text-[10px] text-muted-foreground">
@@ -2130,14 +2528,27 @@ export function Login() {
           </div>
           <Button
             variant="outline"
-            onClick={() => navigate({ to: "/dashboard" })}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await api.login("admin@sentinel.local", "admin123");
+                await refreshData();
+                navigate({ to: "/dashboard" });
+              } catch (err: any) {
+                setError(err.message || "Sign in failed — is the backend running?");
+              } finally {
+                setBusy(false);
+              }
+            }}
             className="w-full"
+            disabled={busy}
           >
-            Continue with demo
+            Continue with seeded admin
           </Button>
         </div>
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Demo access only · No real authentication is performed.
+          Seeded credentials: admin@sentinel.local / admin123
         </p>
       </div>
     </div>

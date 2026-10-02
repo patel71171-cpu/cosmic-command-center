@@ -1,0 +1,30 @@
+# Runs ZAP + Semgrep inside the isolated, network-restricted scan sandbox.
+# The main backend talks to ZAP on the sentinel_scan network only.
+services:
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    command: >
+      zap.sh -daemon -host 0.0.0.0 -port 8090
+      -config api.key=${ZAP_API_KEY}
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+    networks:
+      - sentinel_scan
+    mem_limit: 2g
+    cpus: 1.5
+    restart: unless-stopped
+
+  semgrep:
+    image: returntocorp/semgrep:latest
+    volumes:
+      - scan_target:/sandbox/src:ro     # source mounted read-only
+    entrypoint: ["sleep", "infinity"]   # orchestrator execs into it
+    networks:
+      - sentinel_scan
+    mem_limit: 1g
+    cpus: 1.0
+
+networks:
+  sentinel_scan:
+    driver: bridge
+    internal: false   # set true in production: no outbound internet from sandbox

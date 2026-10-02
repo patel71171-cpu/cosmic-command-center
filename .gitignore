@@ -16,6 +16,19 @@ dist-ssr
 .nitro
 *.local
 
+# SENTINEL backend
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+backend/*.db
+backend/.jwt_secret
+backend/evidence_storage/
+.env
+.env.*
+!.env.example
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

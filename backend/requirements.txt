@@ -1,0 +1,30 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+pydantic-settings==2.15.0
+python-multipart==0.0.20
+email-validator==2.3.0
+
+# Database
+SQLAlchemy==2.1.1
+psycopg2-binary==2.9.10
+
+# Auth
+python-jose[cryptography]==3.5.0
+passlib==1.7.4
+bcrypt==4.0.1
+
+# HTTP / scanning
+httpx==0.28.1
+requests==2.32.3
+
+# Async task queue
+celery==5.4.0
+redis==5.2.1
+
+# Scoring
+cvss==3.6
+
+# Tests
+pytest==9.1.1
+pytest-asyncio==1.4.0

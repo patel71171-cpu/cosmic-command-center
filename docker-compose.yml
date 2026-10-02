@@ -1,0 +1,95 @@
+version: "3.8"
+
+services:
+  # ── PostgreSQL Database ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel
+      POSTGRES_DB: sentinel
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (Task Queue) ───────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── SENTINEL Backend API ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://sentinel:sentinel@postgres:5432/sentinel
+      REDIS_URL: redis://redis:6379/0
+      # Override in .env for production (openssl rand -hex 32). When unset the
+      # backend generates and persists its own key instead of using a known one.
+      JWT_SECRET: ${JWT_SECRET:-}
+      DEBUG: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - evidence_storage:/app/evidence_storage
+
+  # ── Celery Worker (Async Scan Tasks) ────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://sentinel:sentinel@postgres:5432/sentinel
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - evidence_storage:/app/evidence_storage
+
+  # ── OWASP ZAP (Sandboxed Scanner) ───────────────────────────────────
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true
+    ports:
+      - "8080:8080"
+    networks:
+      - sandbox
+
+  # ── Sandbox Network (Isolated) ──────────────────────────────────────
+  sandbox:
+    image: alpine:latest
+    command: sleep infinity
+    networks:
+      - sandbox
+
+networks:
+  sandbox:
+    driver: bridge
+    internal: true  # No external network access
+
+volumes:
+  postgres_data:
+  redis_data:
+  evidence_storage:
