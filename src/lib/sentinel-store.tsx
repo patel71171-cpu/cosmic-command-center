@@ -178,16 +178,3 @@ export function useSentinel() {
   if (!ctx) throw new Error('Missing SentinelProvider');
   return ctx;
 }
-
-      }}
-    >
-      {children}
-    </Context.Provider>
-  );
-}
-
-export function useSentinel() {
-  const value = useContext(Context);
-  if (!value) throw new Error('SENTINEL context missing');
-  return value;
-}
