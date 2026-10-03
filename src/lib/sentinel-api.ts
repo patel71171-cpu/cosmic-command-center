@@ -179,6 +179,7 @@ function mapAssessment(raw: RawAssessment): Assessment {
     scan_duration: raw.scan_duration ?? 0,
     error_message: raw.error_message ?? null,
     completed_at: raw.completed_at,
+    created_at: raw.created_at,
     methodology: raw.methodology,
     ...(endpoints ? { endpoints } : {}),
   } as Assessment;
@@ -345,6 +346,16 @@ export const api = {
   // Get every evidence artifact attached to a finding
   getFindingEvidence: async (findingId: string): Promise<EvidenceItem[]> => {
     const rows = await request<any[]>(`/findings/${findingId}/evidence`);
+    return rows.map(mapEvidence);
+  },
+
+  /**
+   * Full evidence chain for an assessment, including the scan log.
+   * The log record is stored without a finding_id, so a per-finding lookup
+   * never returns it.
+   */
+  getAssessmentEvidence: async (assessmentId: string): Promise<EvidenceItem[]> => {
+    const rows = await request<any[]>(`/evidence/chain/${assessmentId}`);
     return rows.map(mapEvidence);
   },
 

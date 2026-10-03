@@ -1302,6 +1302,24 @@ export function EvidenceViewer({ id }: { id: string }) {
             // Keep the single artifact — the sibling lookup is best effort.
           }
         }
+        // The scan log is written against the assessment, not the finding, so a
+        // per-finding lookup never returns it. Pull the whole chain and keep the
+        // run-level records alongside this finding's own artifacts.
+        const owner = findings.find((f) => f.id === mapped.finding);
+        if (owner?.assessment_id) {
+          try {
+            const chain = await api.getAssessmentEvidence(owner.assessment_id);
+            const seen = new Set(loaded.map((e) => e.id));
+            for (const row of chain) {
+              if (!seen.has(row.id)) {
+                seen.add(row.id);
+                loaded = [...loaded, row];
+              }
+            }
+          } catch {
+            // The scan log is supplementary; finding artifacts still render.
+          }
+        }
       } catch {
         const seed = evidence.find((e) => e.id === id);
         loaded = seed ? evidence.filter((e) => e.finding === seed.finding) : [];
@@ -1313,7 +1331,7 @@ export function EvidenceViewer({ id }: { id: string }) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, findings]);
 
   if (phase === "loading") return <Empty text="Loading evidence…" />;
   const item = items.find((e) => e.id === activeId) ?? items[0];
@@ -1358,18 +1376,16 @@ export function EvidenceViewer({ id }: { id: string }) {
       </div>
       <div className="grid gap-4 xl:grid-cols-[215px_minmax(0,1fr)_260px]">
         <Panel title="Evidence Timeline" sub="Select an artifact">
-          <div className="space-y-2">
+          <div className="scrollbar max-h-[62vh] space-y-2 overflow-y-auto pr-1">
             {related.map((e) => (
               <Button
                 key={e.id}
                 variant="ghost"
                 onClick={() => setActiveId(e.id)}
-                className={`h-auto w-full flex-col items-start gap-1 rounded-md border p-3 text-left text-xs ${activeId === e.id ? "border-primary bg-accent" : "border-border bg-secondary"}`}
+                className={`h-auto w-full min-w-0 flex-col items-start gap-1 overflow-hidden rounded-md border p-3 text-left text-xs ${activeId === e.id ? "border-primary bg-accent" : "border-border bg-secondary"}`}
               >
-                <span className="font-semibold">
-                  {e.id} · {e.type}
-                </span>
-                <span className="text-[10px] font-normal text-muted-foreground">{e.time}</span>
+                <span className="block w-full truncate font-semibold" title={e.id}>{e.id}</span>
+                <span className="block w-full truncate text-[10px] font-normal text-muted-foreground">{e.type} · {e.time}</span>
               </Button>
             ))}
           </div>
@@ -1386,7 +1402,7 @@ export function EvidenceViewer({ id }: { id: string }) {
           }
         >
           <div className="overflow-x-auto rounded-md border border-border bg-background p-4 sm:p-6">
-            <pre className="min-h-[350px] whitespace-pre-wrap break-all font-mono text-[11px] leading-6 text-foreground sm:text-xs">
+            <pre className="min-h-[350px] max-h-[70vh] overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-6 text-foreground sm:text-xs">
               {item.content}
             </pre>
           </div>
@@ -1504,7 +1520,7 @@ export function Remediation() {
                     >
                       {f.title}
                     </Link>
-                    <div className="mt-1 text-[10px] text-muted-foreground">{f.id}</div>
+                    <div className="mt-1 max-w-[220px] truncate text-[10px] text-muted-foreground" title={f.id}>{f.id}</div>
                   </td>
                   <td className={td}>
                     <select
@@ -2240,8 +2256,8 @@ export function Login() {
     }
   };
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4"><div className="cosmic-bg" />
+      <div className="relative z-10 w-full max-w-md">
         <div className="mb-9 text-center">
           <div className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-md bg-primary text-primary-foreground">
             <ShieldCheck size={27} />

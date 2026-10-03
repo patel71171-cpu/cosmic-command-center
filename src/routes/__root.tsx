@@ -4,6 +4,8 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useNavigate,
+  useLocation,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -11,7 +13,8 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportError } from "../lib/-error-reporting";
-import { SentinelShell } from "../components/sentinel-shell";
+import { SentinelShell, SentinelStoreOnly } from "../components/sentinel-shell";
+import { getToken } from "../lib/sentinel-api";
 
 function NotFoundComponent() {
   return (
@@ -116,13 +119,36 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+/** Routes that render without the dashboard chrome, and without a session. */
+const PUBLIC_ROUTES = new Set(["/", "/login"]);
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const location = useLocation();
+  const router = useRouter();
+  const navigate = useNavigate();
+
+  const isPublic = PUBLIC_ROUTES.has(location.pathname);
+  const hasSession = Boolean(getToken());
+
+  // Gate the workspace: an anonymous visitor is always sent to sign in, and a
+  // signed-in one is kept out of the login screen.
+  useEffect(() => {
+    if (!isPublic && !hasSession) {
+      navigate({ to: "/login", replace: true });
+    } else if (location.pathname === "/login" && hasSession) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [isPublic, hasSession, location.pathname, navigate]);
+
+  // Hold the outlet until the redirect settles so protected pages never flash.
+  if (!isPublic && !hasSession) return null;
+  if (location.pathname === "/login" && hasSession) return null;
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <SentinelShell><Outlet /></SentinelShell>
+      {isPublic ? <SentinelStoreOnly><Outlet /></SentinelStoreOnly> : <SentinelShell><Outlet /></SentinelShell>}
     </QueryClientProvider>
   );
 }
