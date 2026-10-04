@@ -17,6 +17,10 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    // Pinned rather than left to Vite's default so the documented frontend URL
+    // (http://localhost:3002) keeps working without a --port flag.
+    port: 3002,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

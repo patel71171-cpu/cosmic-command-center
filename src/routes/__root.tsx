@@ -118,6 +118,13 @@ function RootShell({ children }: { children: ReactNode }) {
 /** Routes that render without the dashboard chrome, and without a session. */
 const PUBLIC_ROUTES = new Set(["/", "/login"]);
 
+/**
+ * Google's redirect lands here before a token exists, so it must also bypass
+ * the session gate — otherwise the guard would bounce it straight back to the
+ * login screen and the one-time code would never be redeemed.
+ */
+const HANDOFF_ROUTES = new Set(["/auth/callback"]);
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const location = useLocation();
@@ -125,26 +132,29 @@ function RootComponent() {
   const navigate = useNavigate();
 
   const isPublic = PUBLIC_ROUTES.has(location.pathname);
+  const isHandoff = HANDOFF_ROUTES.has(location.pathname);
   const hasSession = Boolean(getToken());
 
   // Gate the workspace: an anonymous visitor is always sent to sign in, and a
   // signed-in one is kept out of the login screen.
   useEffect(() => {
-    if (!isPublic && !hasSession) {
+    if (!isPublic && !isHandoff && !hasSession) {
       navigate({ to: "/login", replace: true });
     } else if (location.pathname === "/login" && hasSession) {
       navigate({ to: "/dashboard", replace: true });
     }
-  }, [isPublic, hasSession, location.pathname, navigate]);
+  }, [isPublic, isHandoff, hasSession, location.pathname, navigate]);
 
   // Hold the outlet until the redirect settles so protected pages never flash.
-  if (!isPublic && !hasSession) return null;
+  if (!isPublic && !isHandoff && !hasSession) return null;
   if (location.pathname === "/login" && hasSession) return null;
+
+  const chromeFree = isPublic || isHandoff;
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      {isPublic ? <SentinelStoreOnly><Outlet /></SentinelStoreOnly> : <SentinelShell><Outlet /></SentinelShell>}
+      {chromeFree ? <SentinelStoreOnly><Outlet /></SentinelStoreOnly> : <SentinelShell><Outlet /></SentinelShell>}
     </QueryClientProvider>
   );
 }
