@@ -1612,7 +1612,6 @@ export function Remediation() {
   );
 }
 export function Posture() {
-  const [comparison, setComparison] = useState<"Before" | "After">("After");
   const { findings, assessments } = useSentinel();
   const active = assessments[0];
   const score = Math.round(active?.score ?? 0);
@@ -1623,14 +1622,46 @@ export function Posture() {
     high: rows.filter((f) => f.severity === "High").length,
     medium: rows.filter((f) => f.severity === "Medium").length,
   });
-  // "Before" is the baseline the scan produced (every finding unresolved);
-  // "After" is what is still unresolved once verification has run.
-  const before = { score, ...bySeverity(findings) };
-  const after = { score, ...bySeverity(open) };
-  const data = comparison === "Before" ? before : after;
   const remediatedPct = findings.length
     ? Math.round((verified.length / findings.length) * 100)
     : 0;
+  // Risk is not spread evenly across the estate, so the most useful posture
+  // signal is where it concentrates. Rank unresolved findings by severity
+  // weight (CVSS, with Critical floored so severity band breaks ties) and show
+  // which asset carries each one.
+  const severityWeight = (f: (typeof findings)[number]) =>
+    (f.cvss || 0) + (f.severity === "Critical" ? 10 : f.severity === "High" ? 6 : 0);
+  const priorityQueue = [...open]
+    .sort((a, b) => severityWeight(b) - severityWeight(a))
+    .slice(0, 12);
+  const exposedAssets = [...new Set(open.map((f) => f.asset || "—"))]
+    .map((asset) => {
+      const rows = open.filter((f) => (f.asset || "—") === asset);
+      const sev = bySeverity(rows);
+      const worst = rows.reduce(
+        (acc, f) => (acc && severityWeight(f) > severityWeight(acc) ? f : acc),
+        rows[0],
+      );
+      return {
+        asset,
+        open: rows.length,
+        critical: sev.critical,
+        high: sev.high,
+        worstCvss: worst?.cvss || 0,
+        worstSeverity: worst?.severity || "Informational",
+      };
+    })
+    .sort((a, b) => b.critical - a.critical || b.high - a.high || b.open - a.open);
+  // Per-asset severity mix, used as a proportional bar.
+  const assetBar = (a: { critical: number; high: number; open: number }) => {
+    const rest = Math.max(0, a.open - a.critical - a.high);
+    const parts = [
+      ["bg-critical", a.critical],
+      ["bg-high", a.high],
+      ["bg-medium", rest],
+    ].filter(([, n]) => (n as number) > 0) as [string, number][];
+    return parts.map(([cls, n]) => ({ cls, pct: (n / a.open) * 100 }));
+  };
   const evidenceCoverage = findings.length
     ? Math.round(
         (findings.filter((f) => f.evidence.length > 0).length / findings.length) * 100,
@@ -1659,7 +1690,7 @@ export function Posture() {
     <>
       <PageHeading
         title="Security Posture"
-        description="Measure the change in exposure as findings move through verification."
+        description="See where exposure concentrates and what to fix first."
         actions={<SectionLink to="/reports">Open assessment report</SectionLink>}
       />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -1692,95 +1723,104 @@ export function Posture() {
           <TrendChart mode="open" />
         </Panel>
       </div>
-      <div className="my-7 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <div className="eyebrow mb-2">MEASURABLE IMPROVEMENT</div>
-          <h2 className="text-xl font-semibold">Before vs After Security Posture</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Compare the initial assessment with the post-remediation re-test.
-          </p>
-        </div>
-        <div className="flex rounded-md border border-border bg-secondary p-1">
-          {(["Before", "After"] as const).map((v) => (
-            <Button
-              key={v}
-              onClick={() => setComparison(v)}
-              variant={comparison === v ? "default" : "ghost"}
-              size="sm"
-              className="h-7 text-xs"
-            >
-              {v}
-            </Button>
-          ))}
-        </div>
+      <div className="my-7">
+        <div className="eyebrow mb-2">WHERE RISK CONCENTRATES</div>
+        <h2 className="text-xl font-semibold">Remediation Priority</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Unresolved findings ranked by CVSS, and the assets carrying them.
+        </p>
       </div>
-      <div className="grid gap-4 lg:grid-cols-[1fr_200px_1fr]">
-        <div className={`panel p-6 ${comparison === "Before" ? "border-high" : ""}`}>
-          <div className="eyebrow text-high">BEFORE REMEDIATION</div>
-          <div className="mt-7 flex items-end gap-2">
-            <strong className="text-5xl font-semibold">{before.score}</strong>
-            <span className="mb-1 text-sm text-muted-foreground">/100 security score</span>
-          </div>
-          <div className="mt-5 h-2 overflow-hidden rounded bg-secondary">
-            <div className="h-full rounded bg-high" style={{ width: `${before.score}%` }} />
-          </div>
-          <div className="mt-7 grid grid-cols-3 gap-2 border-t border-border pt-5">
-            {[
-              ["Critical", String(before.critical), "text-critical"],
-              ["High", String(before.high), "text-high"],
-              ["Medium", String(before.medium), "text-medium"],
-            ].map(([k, v, c]) => (
-              <div key={k}>
-                <div className={`text-2xl font-semibold ${c}`}>{v}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{k}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-2 py-2 text-center">
-          <ArrowRight size={23} className="text-success" />
-          <div className="text-2xl font-semibold text-success">+{verified.length}</div>
-          <div className="text-xs text-muted-foreground">findings verified</div>
-          <div className="mt-2 rounded border border-success/25 bg-success/10 px-3 py-1.5 text-[11px] text-success">
-            {remediatedPct}% remediated
-          </div>
-        </div>
-        <div className={`panel p-6 ${comparison === "After" ? "border-success" : ""}`}>
-          <div className="eyebrow text-success">AFTER VERIFICATION</div>
-          <div className="mt-7 flex items-end gap-2">
-            <strong className="text-5xl font-semibold">{after.score}</strong>
-            <span className="mb-1 text-sm text-muted-foreground">/100 security score</span>
-          </div>
-          <div className="mt-5 h-2 overflow-hidden rounded bg-secondary">
-            <div className="h-full rounded bg-success" style={{ width: `${after.score}%` }} />
-          </div>
-          <div className="mt-7 grid grid-cols-3 gap-2 border-t border-border pt-5">
-            {[
-              ["Critical", String(after.critical), "text-critical"],
-              ["High", String(after.high), "text-high"],
-              ["Medium", String(after.medium), "text-medium"],
-            ].map(([k, v, c]) => (
-              <div key={k}>
-                <div className={`text-2xl font-semibold ${c}`}>{v}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{k}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <Panel title={`${comparison} Snapshot`} sub="Selected assessment state">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded border border-border bg-secondary p-4">
-              <div className="text-xs text-muted-foreground">Security score</div>
-              <div className="mt-2 text-2xl font-semibold">{data.score}/100</div>
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_1fr]">
+        <Panel
+          title="Priority Remediation Queue"
+          sub={`Highest-risk unresolved findings${open.length > priorityQueue.length ? ` · showing top ${priorityQueue.length} of ${open.length}` : ""}`}
+          className="flex min-w-0 flex-col"
+        >
+          {priorityQueue.length ? (
+            <div className="-mx-1 max-h-[420px] min-h-0 flex-1 overflow-y-auto pr-1">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-panel">
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <th className="pb-2 pr-2 font-medium">Finding</th>
+                    <th className="pb-2 pr-2 font-medium">Asset</th>
+                    <th className="pb-2 pr-2 font-medium">Owner</th>
+                    <th className="pb-2 text-right font-medium">CVSS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priorityQueue.map((f) => (
+                    <tr
+                      key={f.id}
+                      className="border-b border-border/50 transition-colors last:border-0 hover:bg-secondary/60"
+                    >
+                      <td className="py-2 pr-2 align-top">
+                        <div className="flex items-start gap-2">
+                          <Badge tone={f.severity}>{f.severity.slice(0, 4)}</Badge>
+                          <span className="min-w-0 leading-snug">{f.title}</span>
+                        </div>
+                      </td>
+                      <td className="max-w-[170px] truncate py-2 pr-2 align-top text-muted-foreground">
+                        {f.asset}
+                      </td>
+                      <td className="py-2 pr-2 align-top text-muted-foreground">
+                        {f.owner}
+                      </td>
+                      <td className="py-2 text-right align-top font-semibold tabular-nums">
+                        {(f.cvss || 0).toFixed(1)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div className="rounded border border-border bg-secondary p-4">
-              <div className="text-xs text-muted-foreground">Critical + high</div>
-              <div className="mt-2 text-2xl font-semibold">{data.critical + data.high}</div>
-            </div>
-          </div>
+          ) : (
+            <Empty text="Nothing unresolved — every finding has been verified." />
+          )}
         </Panel>
+
+        <Panel
+          title="Exposure By Asset"
+          sub="Where unresolved findings cluster, worst severity first"
+          className="flex min-w-0 flex-col"
+        >
+          {exposedAssets.length ? (
+            <div className="max-h-[420px] min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+              {exposedAssets.map((a) => (
+                <div key={a.asset}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate text-xs">{a.asset}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {a.open} open
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex h-1.5 overflow-hidden rounded bg-secondary">
+                    {assetBar(a).map((seg, i) => (
+                      <div
+                        key={i}
+                        className={seg.cls}
+                        style={{ width: `${seg.pct}%` }}
+                        title={`${seg.pct.toFixed(0)}%`}
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="tabular-nums">
+                      worst {a.worstCvss.toFixed(1)} {a.worstSeverity.toLowerCase()}
+                    </span>
+                    {a.critical > 0 && (
+                      <span className="text-critical">{a.critical} critical</span>
+                    )}
+                    {a.high > 0 && <span className="text-high">{a.high} high</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty text="No unresolved findings to attribute to an asset." />
+          )}
+        </Panel>
+      </div>
+      <div className="mt-4">
         <Panel
           title="Security Category Coverage"
           sub="Assessment coverage across application layers"
