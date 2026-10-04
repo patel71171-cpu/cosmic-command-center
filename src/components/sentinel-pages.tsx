@@ -1258,7 +1258,7 @@ export function FindingDetail({ id }: { id: string }) {
               <option>Priya Shah</option>
               <option>Arjun Mehta</option>
               <option>Nisha Rao</option>
-              <option>Alex Morgan</option>
+              <option>Pratham Patel</option>
             </select>
           </label>
           <Button
@@ -1533,7 +1533,7 @@ export function Remediation() {
                       <option>Priya Shah</option>
                       <option>Arjun Mehta</option>
                       <option>Nisha Rao</option>
-                      <option>Alex Morgan</option>
+                      <option>Pratham Patel</option>
                     </select>
                   </td>
                   <td className={td}>
@@ -2209,7 +2209,7 @@ export function SettingsPage() {
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel title="Profile">
           <div className="space-y-4">
-            <Field label="Name" value="Alex Morgan" set={() => {}} placeholder="Name" />
+            <Field label="Name" value="Pratham Patel" set={() => {}} placeholder="Name" />
             <Field label="Role" value="Security Analyst" set={() => {}} placeholder="Role" />
             <div className="text-xs text-muted-foreground">
               Seeded profile · stored locally.
@@ -2587,11 +2587,6 @@ export function Login() {
               Continue with Google
             </Button>
           </div>
-          <p className="mt-5 text-center text-xs text-muted-foreground/60">
-            {googleReady
-              ? "Protected by Google OAuth 2.0 \u00b7 Access is logged for auditing"
-              : "Demo mode \u00b7 Google OAuth is not configured, so sign-in uses the local demo account"}
-          </p>
         </div>
       </div>
     </div>
