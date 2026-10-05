@@ -18,6 +18,9 @@ RUN pip install --only-binary=:all: -r requirements.txt
 # Copy application
 COPY app/ ./app/
 COPY seed.py ./seed.py
+# Captured scan output replayed by seed.py so a fresh database matches the
+# original workspace. Without this, seeding falls back to a single live scan.
+COPY seed_data/ ./seed_data/
 
 # Evidence blobs are written here; mount a volume over it in production.
 RUN mkdir -p /app/evidence_storage

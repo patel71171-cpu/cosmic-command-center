@@ -46,14 +46,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = body.detail;
-    const message =
-      typeof detail === 'string'
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ')
-          : `API error: ${res.status}`;
+    let message: string;
+    if (typeof detail === 'string') {
+      message = detail;
+    } else if (Array.isArray(detail)) {
+      message = detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
+    } else if (detail && typeof detail === 'object') {
+      // Structured failures (e.g. the AI service reporting why it is down)
+      // carry a human-readable message plus machine-readable extras.
+      message = detail.message || detail.detail || `API error: ${res.status}`;
+    } else {
+      message = `API error: ${res.status}`;
+    }
     const error: any = new Error(message);
     error.status = res.status;
+    if (detail && typeof detail === 'object') {
+      error.reason = detail.reason;
+      error.detail = detail.detail;
+    }
     throw error;
   }
   return res.json();
@@ -359,12 +369,25 @@ export const api = {
     return rows.map(mapEvidence);
   },
 
-  // AI Copilot — proxied to the locally hosted Ollama model
+  // AI Copilot - the backend proxies this to the bundled Ollama service, so
+  // the client never talks to Ollama directly.
   copilotChat: (message: string, history: { role: string; content: string }[] = []) =>
     request<{ reply: string; model: string }>('/copilot/chat', {
       method: 'POST',
       body: JSON.stringify({ message, history }),
     }),
+
+  // Whether the AI service is usable. Used to show a clear reason instead of
+  // a generic failure when the model is missing or the server is down.
+  copilotHealth: () =>
+    request<{
+      server: string;
+      model: string;
+      reachable: boolean;
+      model_available: boolean;
+      models: string[];
+      detail?: string;
+    }>('/copilot/health'),
 
   // Generate an executive summary / remediation plan for a finding
   investigateFinding: (id: string, message?: string) =>

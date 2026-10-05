@@ -1,5 +1,4 @@
-"""AI Copilot router — proxies chat to a locally hosted Ollama model."""
-import httpx
+"""AI Copilot router — proxies chat to the bundled Ollama service."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -11,6 +10,12 @@ from ..core.audit import log_audit_event
 from ..models.user import User
 from ..models.assessment import Assessment
 from ..models.finding import Finding
+from ..services.ollama_health import (
+    OllamaUnavailable,
+    check_health,
+    chat as ollama_chat,
+    require_ready,
+)
 
 router = APIRouter(prefix="/api/copilot", tags=["AI Copilot"])
 
@@ -67,6 +72,12 @@ class ChatRequest(BaseModel):
     history: list[dict] | None = None
 
 
+@router.get("/health")
+async def copilot_health(current_user: User = Depends(get_current_user)):
+    """Report whether the AI service is usable, so the UI can explain itself."""
+    return await check_health()
+
+
 @router.post("/chat")
 async def chat(
     request: ChatRequest,
@@ -75,6 +86,16 @@ async def chat(
 ):
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message is required")
+
+    # Fail fast with an actionable reason rather than waiting out the full
+    # generation timeout when the service is down or the model is missing.
+    try:
+        await require_ready()
+    except OllamaUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"reason": exc.reason, "message": str(exc), "detail": exc.detail},
+        )
 
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -90,29 +111,15 @@ async def chat(
     messages.append({"role": "user", "content": request.message})
 
     try:
-        async with httpx.AsyncClient(timeout=180) as client:
-            response = await client.post(
-                settings.OLLAMA_URL.rstrip("/") + "/api/chat",
-                json={
-                    "model": settings.OLLAMA_MODEL,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {"temperature": 0.3, "num_predict": 512},
-                },
-            )
-            response.raise_for_status()
-            payload = response.json()
-    except HTTPException:
-        raise
-    except Exception as exc:
+        answer = await ollama_chat(messages, num_predict=512)
+    except OllamaUnavailable as exc:
         raise HTTPException(
-            status_code=502,
-            detail=f"Local model unavailable ({exc.__class__.__name__})",
+            status_code=503,
+            detail={"reason": exc.reason, "message": str(exc), "detail": exc.detail},
         )
 
-    answer = (payload.get("message") or {}).get("content") or ""
     if not answer.strip():
-        raise HTTPException(status_code=502, detail="Local model returned an empty response")
+        raise HTTPException(status_code=502, detail="The model returned an empty response")
 
     await log_audit_event(
         action="CREATE",

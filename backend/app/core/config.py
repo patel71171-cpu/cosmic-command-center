@@ -55,8 +55,14 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://sentinel:sentinel@localhost:5432/sentinel")
+    # Database. The driver is named explicitly: SQLAlchemy 2.1 no longer
+    # defaults a bare postgresql:// to psycopg2, so omitting it would fail with
+    # "No module named 'psycopg'" and silently drop the app onto the SQLite
+    # fallback below.
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql+psycopg2://sentinel:sentinel@localhost:5432/sentinel",
+    )
 
     # Redis
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -78,11 +84,38 @@ class Settings(BaseSettings):
     # CORS — comma-separated origins (a JSON array also works).
     CORS_ORIGINS: str = "http://localhost:3002,http://localhost:3000"
 
-    # Local Ollama model used by the AI Copilot
-    OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    # ── AI provider ──────────────────────────────────────────────────────
+    # Self-hosted Ollama used by the AI Copilot.
+    #   OLLAMA_HOST — base URL of the Ollama server. In Docker this is the
+    #                 compose service name (http://ollama:11434); for a bare
+    #                 local run it is the default below.
+    #   OLLAMA_MODEL — the model to request. It must already be pulled into
+    #                  whichever Ollama instance OLLAMA_HOST points at.
+    # OLLAMA_URL is accepted as a legacy alias so existing .env files keep
+    # working, but OLLAMA_HOST takes precedence.
+    OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", os.getenv("OLLAMA_URL", "http://localhost:11434"))
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen2.5vl:3b")
 
+    # How long to wait on a generation before giving up, and how long to wait
+    # when merely checking whether the server is up.
+    OLLAMA_TIMEOUT_SECONDS: int = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "180"))
+    OLLAMA_PROBE_TIMEOUT_SECONDS: float = float(os.getenv("OLLAMA_PROBE_TIMEOUT_SECONDS", "5"))
+
     model_config = {"env_file": ".env"}
+
+    @property
+    def ollama_url(self) -> str:
+        """Base URL of the Ollama server, normalised without a trailing slash.
+
+        Accepts a bare host:port (as `ollama` or `ollama:11434`), which is what
+        the Ollama tooling itself uses, and fills in the scheme.
+        """
+        raw = (self.OLLAMA_HOST or "").strip().rstrip("/")
+        if not raw:
+            return "http://localhost:11434"
+        if not raw.startswith(("http://", "https://")):
+            raw = "http://" + raw
+        return raw
 
     @model_validator(mode="after")
     def _reject_blank_jwt_secret(self) -> "Settings":

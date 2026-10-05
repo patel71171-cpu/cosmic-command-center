@@ -2046,6 +2046,28 @@ export function Copilot() {
         text: "I can help explain the current assessment — findings, CVSS v4.0 severity, evidence and remediation. Ask me anything about what the scan found.",
       },
     ]);
+  // null = still checking. Lets the page explain an unavailable AI service
+  // rather than only failing once the user sends a message.
+  const [aiStatus, setAiStatus] = useState<
+    null | { ok: boolean; message: string; detail?: string | undefined }
+  >(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .copilotHealth()
+      .then((h) => {
+        if (cancelled) return;
+        if (h.reachable && h.model_available) setAiStatus({ ok: true, message: "" });
+        else setAiStatus({ ok: false, message: h.detail || "The AI service is unavailable.", detail: h.detail });
+      })
+      .catch((err: any) => {
+        if (!cancelled) setAiStatus({ ok: false, message: err?.message || "The AI service is unavailable." });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const prompts = [
     "Explain this vulnerability in simple terms",
     "Why is this finding high risk?",
@@ -2073,13 +2095,23 @@ export function Copilot() {
       const { reply } = await api.copilotChat(question, history);
       setMessages((v) => [...v, { who: "assistant", text: reply }]);
     } catch (err: any) {
+      // The backend distinguishes "unreachable" from "model missing"; surface
+      // the specific reason so the message is actionable.
+      const reason =
+        err?.message ||
+        (err?.reason === "model_missing"
+          ? "The AI model is not installed on the server."
+          : err?.reason === "unreachable"
+            ? "The AI service is not reachable."
+            : "request failed");
       setMessages((v) => [
         ...v,
         {
           who: "assistant",
-          text: `I could not reach the reasoning service for that one (${err?.message || "request failed"}). Please try again in a moment.`,
+          text: `I could not reach the reasoning service for that one. ${reason}`,
         },
       ]);
+      setAiStatus({ ok: false, message: reason, detail: err?.detail });
     } finally {
       setBusy(false);
     }
@@ -2090,6 +2122,21 @@ export function Copilot() {
         title="AI Security Copilot"
         description="Explore contextual explanations and remediation suggestions for the current assessment."
       />
+      {aiStatus && !aiStatus.ok && (
+        <div
+          role="status"
+          className="mb-4 flex items-start gap-3 rounded-md border border-high/30 bg-high/10 p-4 text-xs"
+        >
+          <TriangleAlert size={16} className="mt-0.5 shrink-0 text-high" />
+          <div className="min-w-0">
+            <div className="font-semibold text-high">AI service unavailable</div>
+            <p className="mt-1 leading-5 text-muted-foreground">{aiStatus.message}</p>
+            {aiStatus.detail && aiStatus.detail !== aiStatus.message && (
+              <p className="mt-1 leading-5 text-muted-foreground/80">{aiStatus.detail}</p>
+            )}
+          </div>
+        </div>
+      )}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_285px]">
         <div className="panel flex min-h-[590px] flex-col">
           <div className="border-b border-border p-5">

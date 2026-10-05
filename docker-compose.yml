@@ -1,5 +1,5 @@
-services:
-  # ── PostgreSQL Database ──────────────────────────────────────────────
+﻿services:
+  # ---- PostgreSQL Database ----------------------------------------------
   postgres:
     image: postgres:16-alpine
     environment:
@@ -16,7 +16,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Redis (Task Queue) ───────────────────────────────────────────────
+  # ---- Redis (Task Queue) ----------------------------------------------
   redis:
     image: redis:7-alpine
     ports:
@@ -29,7 +29,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── SENTINEL Frontend (TanStack Start SSR) ──────────────────────────
+  # ---- SENTINEL Frontend (TanStack Start SSR) ---------------------------
   frontend:
     build:
       context: .
@@ -47,7 +47,7 @@ services:
       - backend
     restart: unless-stopped
 
-  # ── SENTINEL Backend API ─────────────────────────────────────────────
+  # ---- SENTINEL Backend API ---------------------------------------------
   backend:
     build:
       context: ./backend
@@ -66,17 +66,30 @@ services:
       # dev; in this stack the SPA calls the backend directly, so it must be
       # an allowed origin.
       CORS_ORIGINS: http://localhost:3002,http://localhost:3000
+      # AI Copilot. The backend reaches the bundled Ollama service by its
+      # compose name, so a fresh deployment needs no Ollama on the host.
+      # Override OLLAMA_HOST in the environment / .env to reuse an existing
+      # Ollama instead - e.g. http://host.docker.internal:11434.
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5vl:3b}
       DEBUG: "false"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Deliberately NOT service_healthy. The backend must come up even if
+      # Ollama is still starting, pulling a model, or absent entirely -
+      # otherwise a slow model download takes the whole app down with it.
+      # The copilot reports its own "AI unavailable" state instead.
+      ollama:
+        condition: service_started
+        required: false
     volumes:
       - evidence_storage:/app/evidence_storage
     restart: unless-stopped
 
-  # ── Celery Worker (Async Scan Tasks) ────────────────────────────────
+  # ---- Celery Worker (Async Scan Tasks) ---------------------------------
   worker:
     build:
       context: ./backend
@@ -98,7 +111,68 @@ services:
       - evidence_storage:/app/evidence_storage
     restart: unless-stopped
 
-  # ── OWASP ZAP (Sandboxed Scanner) ───────────────────────────────────
+  # ---- Ollama (AI Copilot backend) --------------------------------------
+  # Ships with the stack so nobody needs Ollama installed on their own
+  # machine. The backend reaches it by service name over the compose network;
+  # the port is bound to 127.0.0.1 only, so it is never publicly exposed.
+  #
+  # Models are not baked into the image. Pull one once the service is up:
+  #   docker compose exec ollama ollama pull qwen2.5vl:3b
+  # ollama-init below does this automatically on first start.
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      # Published to the host for convenience only - the backend reaches
+      # Ollama over the compose network at http://ollama:11434, so nothing
+      # depends on this mapping.
+      #
+      # Defaults to 11435 because a host-installed Ollama commonly already
+      # holds 11434. Override with OLLAMA_PUBLISH_PORT if you prefer.
+      - "127.0.0.1:${OLLAMA_PUBLISH_PORT:-11435}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      # Keep the model resident between requests instead of unloading it,
+      # which otherwise makes every first message after a pause very slow.
+      OLLAMA_KEEP_ALIVE: "30m"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+    # ---- NVIDIA GPU (optional) ----
+    # Uncomment to accelerate generation on a CUDA-capable host. Without this
+    # the container runs on CPU, which works but is slower.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ---- Ollama model bootstrap -------------------------------------------
+  # Pulls the configured model on first run so the AI works out of the box.
+  # Exits once the pull completes; harmless to leave in the stack.
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "Ensuring model '${OLLAMA_MODEL:-qwen2.5vl:3b}' is present..."
+        ollama pull "${OLLAMA_MODEL:-qwen2.5vl:3b}"
+        echo "Model ready."
+    restart: "no"
+
+  # ---- OWASP ZAP (Sandboxed Scanner) ------------------------------------
   zap:
     image: ghcr.io/zaproxy/zaproxy:stable
     command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true
@@ -110,7 +184,7 @@ services:
     networks:
       - sandbox
 
-  # ── Sandbox Network (Isolated) ──────────────────────────────────────
+  # ---- Sandbox Network (Isolated) ---------------------------------------
   sandbox:
     image: alpine:latest
     command: sleep infinity
@@ -126,3 +200,6 @@ volumes:
   postgres_data:
   redis_data:
   evidence_storage:
+  # Persists pulled models, so they survive container recreation. This is
+  # several GB once a model is downloaded.
+  ollama_data:

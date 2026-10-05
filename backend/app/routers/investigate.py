@@ -148,6 +148,7 @@ async def investigate_finding(
         {"role": "user", "content": context + "\n\n" + user_turn},
     ]
 
+    raw = ""
     try:
         async with httpx.AsyncClient(timeout=240) as client:
             payload = None
@@ -167,7 +168,7 @@ async def investigate_finding(
                 ],
             ):
                 response = await client.post(
-                    settings.OLLAMA_URL.rstrip("/") + "/api/chat",
+                    settings.ollama_url + "/api/chat",
                     json={
                         "model": settings.OLLAMA_MODEL,
                         "messages": attempt_messages,
@@ -190,8 +191,7 @@ async def investigate_finding(
             detail=f"Local model unavailable ({exc.__class__.__name__})",
         )
 
-    raw = (payload.get("message") or {}).get("content") or ""
-    raw = _strip_fences(raw.strip())
+    raw = _strip_fences((((payload or {}).get("message") or {}).get("content") or "").strip())
 
     report = None
     for candidate in (raw, _extract_json(raw)):
@@ -207,7 +207,9 @@ async def investigate_finding(
     if report is None:
         report = _salvage_json(raw)
     if report is None:
-        raise HTTPException(status_code=502, detail="Local model returned an unreadable report")
+        raise HTTPException(
+            status_code=502, detail="The AI service returned an unreadable report"
+        )
 
     required = {
         "executive_summary",
@@ -218,7 +220,9 @@ async def investigate_finding(
         "retest_checklist",
     }
     if not isinstance(report, dict):
-        raise HTTPException(status_code=502, detail="Local model returned an unreadable report")
+        raise HTTPException(
+            status_code=502, detail="The AI service returned an unreadable report"
+        )
 
     # A truncated reply can still be useful. Keep every key the model produced,
     # normalise list fields, and fall back to the recorded finding text rather

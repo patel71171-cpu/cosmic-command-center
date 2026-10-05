@@ -94,6 +94,7 @@ That starts:
 | API docs | <http://localhost:8010/docs> | interactive OpenAPI |
 | Postgres | `localhost:5432` | container-internal network too |
 | Redis | `localhost:6379` | Celery broker |
+| Ollama | `127.0.0.1:11435` | AI Copilot; internal address is `ollama:11434` |
 
 Sign in with `admin@sentinel.local` / `admin123`. The database starts empty, so
 seed it once after the stack is up:
@@ -101,6 +102,56 @@ seed it once after the stack is up:
 ```sh
 docker compose exec backend python seed.py
 ```
+
+### AI Copilot
+
+Ollama is part of the stack, so the copilot works for anyone running it —
+nobody needs Ollama installed on their own machine, and the browser never
+contacts Ollama directly. Requests go client → backend → Ollama.
+
+The `ollama-init` service pulls the configured model on first start
+(`qwen2.5vl:3b` by default, roughly 3 GB). That download happens once and is
+kept in the `ollama_data` volume. Until it finishes the copilot shows an
+"AI service unavailable" notice rather than a blank failure.
+
+To use a different model:
+
+```sh
+# .env next to docker-compose.yml
+OLLAMA_MODEL=llama3.1:8b
+```
+
+```sh
+docker compose up -d ollama-init   # pulls the new model
+```
+
+Check what the backend sees:
+
+```sh
+docker compose exec backend python -c \
+  "import asyncio; from app.services.ollama_health import check_health; print(asyncio.run(check_health()))"
+```
+
+or from the app: `GET /api/copilot/health`.
+
+The host port is `11435` by default because a host-installed Ollama usually
+holds `11434`. Nothing depends on that mapping — it is only for talking to the
+containerised Ollama from the host. Override with `OLLAMA_PUBLISH_PORT`.
+
+For GPU acceleration, uncomment the `deploy.resources` block on the `ollama`
+service. CPU-only works but is slower.
+
+### Pointing at an external Ollama instead
+
+Set `OLLAMA_HOST` to any reachable server (a host:port value is accepted and
+gets `http://` prepended):
+
+```sh
+OLLAMA_HOST=http://192.168.1.50:11434
+OLLAMA_MODEL=qwen2.5vl:3b
+```
+
+The model must already be pulled on that server.
 
 ### Set a JWT secret first
 
