@@ -82,21 +82,6 @@ class Settings(BaseSettings):
     OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen2.5vl:3b")
 
-    # Google sign-in (OIDC authorization-code flow with PKCE).
-    # Blank values simply disable the option instead of breaking startup, so the
-    # rest of the platform stays usable on deployments with no Google project.
-    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
-    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    GOOGLE_REDIRECT_URI: str = os.getenv(
-        "GOOGLE_REDIRECT_URI",
-        "http://localhost:8000/api/auth/google/callback",
-    )
-
-    # Where the browser is sent once Google has authenticated them. Must be
-    # registered in the Google Cloud console as an authorized redirect only if
-    # you change it; the SENTINEL callback above is the only one Google calls.
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3002")
-
     model_config = {"env_file": ".env"}
 
     @model_validator(mode="after")
@@ -106,18 +91,6 @@ class Settings(BaseSettings):
         if not (self.JWT_SECRET or "").strip():
             object.__setattr__(self, "JWT_SECRET", _resolve_jwt_secret())
         return self
-
-    @property
-    def google_oauth_configured(self) -> bool:
-        """True when a Google client ID and secret are both present."""
-        return bool(
-            (self.GOOGLE_CLIENT_ID or "").strip()
-            and (self.GOOGLE_CLIENT_SECRET or "").strip()
-        )
-
-    @property
-    def frontend_url(self) -> str:
-        return (self.FRONTEND_URL or "http://localhost:3002").rstrip("/")
 
     @property
     def cors_origins(self) -> list[str]:

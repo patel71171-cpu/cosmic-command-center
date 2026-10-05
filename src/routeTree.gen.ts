@@ -24,7 +24,6 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AssessmentsIndexRouteImport } from './routes/assessments.index'
 import { Route as AssessmentsIdRouteImport } from './routes/assessments.$id'
 import { Route as AssessmentsNewRouteImport } from './routes/assessments.new'
-import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as EvidenceIdRouteImport } from './routes/evidence.$id'
 import { Route as FindingsIndexRouteImport } from './routes/findings.index'
 import { Route as FindingsIdRouteImport } from './routes/findings.$id'
@@ -106,11 +105,6 @@ const AssessmentsNewRoute = AssessmentsNewRouteImport.update({
   path: '/new',
   getParentRoute: () => AssessmentsRoute,
 } as any)
-const AuthCallbackRoute = AuthCallbackRouteImport.update({
-  id: '/auth/callback',
-  path: '/auth/callback',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const EvidenceIdRoute = EvidenceIdRouteImport.update({
   id: '/evidence/$id',
   path: '/evidence/$id',
@@ -152,7 +146,6 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/assessments/$id': typeof AssessmentsIdRoute
   '/assessments/new': typeof AssessmentsNewRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/evidence/$id': typeof EvidenceIdRoute
   '/findings/$id': typeof FindingsIdRoute
   '/reports/$id': typeof ReportsIdRoute
@@ -172,7 +165,6 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/assessments/$id': typeof AssessmentsIdRoute
   '/assessments/new': typeof AssessmentsNewRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/evidence/$id': typeof EvidenceIdRoute
   '/findings/$id': typeof FindingsIdRoute
   '/reports/$id': typeof ReportsIdRoute
@@ -196,7 +188,6 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/assessments/$id': typeof AssessmentsIdRoute
   '/assessments/new': typeof AssessmentsNewRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/evidence/$id': typeof EvidenceIdRoute
   '/findings/$id': typeof FindingsIdRoute
   '/reports/$id': typeof ReportsIdRoute
@@ -221,7 +212,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/assessments/$id'
     | '/assessments/new'
-    | '/auth/callback'
     | '/evidence/$id'
     | '/findings/$id'
     | '/reports/$id'
@@ -241,7 +231,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/assessments/$id'
     | '/assessments/new'
-    | '/auth/callback'
     | '/evidence/$id'
     | '/findings/$id'
     | '/reports/$id'
@@ -264,7 +253,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/assessments/$id'
     | '/assessments/new'
-    | '/auth/callback'
     | '/evidence/$id'
     | '/findings/$id'
     | '/reports/$id'
@@ -286,7 +274,6 @@ export interface RootRouteChildren {
   ReportsRoute: typeof ReportsRouteWithChildren
   RiskGraphRoute: typeof RiskGraphRoute
   SettingsRoute: typeof SettingsRoute
-  AuthCallbackRoute: typeof AuthCallbackRoute
   EvidenceIdRoute: typeof EvidenceIdRoute
 }
 
@@ -397,13 +384,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssessmentsNewRouteImport
       parentRoute: typeof AssessmentsRoute
     }
-    '/auth/callback': {
-      id: '/auth/callback'
-      path: '/auth/callback'
-      fullPath: '/auth/callback'
-      preLoaderRoute: typeof AuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/evidence/$id': {
       id: '/evidence/$id'
       path: '/evidence/$id'
@@ -498,7 +478,6 @@ const rootRouteChildren: RootRouteChildren = {
   ReportsRoute: ReportsRouteWithChildren,
   RiskGraphRoute: RiskGraphRoute,
   SettingsRoute: SettingsRoute,
-  AuthCallbackRoute: AuthCallbackRoute,
   EvidenceIdRoute: EvidenceIdRoute,
 }
 export const routeTree = rootRouteImport

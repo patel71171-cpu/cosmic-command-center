@@ -9,7 +9,7 @@
 pip install -r requirements.txt
 
 # Run the server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload
 
 # Seed the database
 python seed.py

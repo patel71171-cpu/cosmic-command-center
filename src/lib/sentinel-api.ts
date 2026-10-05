@@ -271,22 +271,6 @@ export const api = {
 
   logout: () => setToken(null),
 
-  // Whether Google sign-in has credentials configured on the backend. The
-  // login screen uses this to enable or explain the Google option.
-  googleAuthConfigured: () =>
-    request<{ configured: boolean }>('/auth/google/status').then((r) => r.configured),
-
-  // Swap the one-time code handed back by Google's redirect for a SENTINEL
-  // token, then store it exactly like a password sign-in.
-  exchangeGoogleCode: async (code: string) => {
-    const res = await request<{ access_token: string; user: any }>(
-      '/auth/google/exchange',
-      { method: 'POST', body: JSON.stringify({ code }) },
-    );
-    setToken(res.access_token);
-    return res.user;
-  },
-
   // Scan a target
   scan: (target: string, checks?: string[]) =>
     request<ScanResult>('/scan', {

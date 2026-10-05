@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { assessments as seedAssessments, findings as seedFindings, type Assessment, type Finding } from './sentinel-data';
-import { api } from './sentinel-api';
+import { api, getToken } from './sentinel-api';
 
 type Store = {
   findings: Finding[];
@@ -43,6 +43,15 @@ export function SentinelProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshData = useCallback(async () => {
+    // Public pages (login, marketing) mount the store with no session. Calling
+    // the protected list endpoints then would 401 and spam the console, so skip
+    // the fetch entirely until a token exists. Every authed flow already calls
+    // refreshData() again right after login.
+    if (!getToken()) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const [assessmentsData, findingsData] = await Promise.all([

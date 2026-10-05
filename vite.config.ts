@@ -3,6 +3,7 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import viteReact from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import tsConfigPaths from 'vite-tsconfig-paths';
+import { BACKEND_PORT } from './dev-ports.mjs';
 
 export default defineConfig({
   plugins: [
@@ -23,7 +24,9 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // Read from dev-ports.mjs so the backend port is defined in one place
+        // and cannot drift out of sync with the startup scripts.
+        target: `http://localhost:${BACKEND_PORT}`,
         changeOrigin: true,
       },
     },
