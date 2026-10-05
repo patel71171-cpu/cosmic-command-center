@@ -15,8 +15,8 @@ REM     through server.mjs, which proxies /api over the compose network.
 REM   - The URL is public to anyone who has it, and it changes every
 REM     time this script runs (unless you set up a named tunnel).
 REM   - It only works while this window is open and this PC is on.
-REM   - The login is still admin@sentinel.local / admin123. Change that
-REM     before sharing the link with anyone you do not trust.
+REM   - The admin password has been changed from the default admin123. Keep it
+REM     that way before sharing the link with anyone.
 REM
 REM  Requires the stack to be up:  docker compose up -d
 REM ============================================================
@@ -61,7 +61,11 @@ echo    Press Ctrl+C to close it.
 echo   ==========================================================
 echo.
 
-"%CF%" tunnel --url http://localhost:%FRONTEND_PORT%
+REM --protocol http2 is deliberate. The default QUIC transport runs over UDP,
+REM which was repeatedly dropped on this network with "datagram manager
+REM error: timeout: no recent network activity", leaving the public URL
+REM intermittently unreachable. HTTP/2 over TCP survives that.
+"%CF%" tunnel --url http://localhost:%FRONTEND_PORT% --protocol http2 --no-autoupdate
 
 echo.
 echo   Tunnel closed.
