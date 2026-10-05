@@ -1,0 +1,40 @@
+# Keep the image build lean: no VCS, no host node_modules (those are built for
+# a different platform), no local caches or secrets.
+
+.git
+.gitignore
+.github
+
+node_modules
+**/node_modules
+
+# Build output is produced inside the image.
+dist
+.output
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+backend/.jwt_secret
+
+# Python backend has its own image; do not copy it into the frontend context.
+backend
+
+# Dev tooling and scratch files
+.vscode
+.idea
+*.log
+npm-debug.log*
+.prettiercache
+.eslintcache
+coverage
+
+# Docs / repo meta
+*.md
+!README.md
+PROGRESS.md
+roadmap.md
+AGENTS.md

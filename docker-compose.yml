@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # ── PostgreSQL Database ──────────────────────────────────────────────
   postgres:
@@ -31,6 +29,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── SENTINEL Frontend (TanStack Start SSR) ──────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3000"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      # server.mjs proxies /api here. "backend" resolves over the compose
+      # network, so the browser only ever talks to the frontend origin.
+      API_PROXY_TARGET: http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
   # ── SENTINEL Backend API ─────────────────────────────────────────────
   backend:
     build:
@@ -46,7 +62,11 @@ services:
       # Override in .env for production (openssl rand -hex 32). When unset the
       # backend generates and persists its own key instead of using a known one.
       JWT_SECRET: ${JWT_SECRET:-}
-      DEBUG: "true"
+      # Browsers hit the frontend on 3002 and it proxies /api server-side in
+      # dev; in this stack the SPA calls the backend directly, so it must be
+      # an allowed origin.
+      CORS_ORIGINS: http://localhost:3002,http://localhost:3000
+      DEBUG: "false"
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,6 +74,7 @@ services:
         condition: service_healthy
     volumes:
       - evidence_storage:/app/evidence_storage
+    restart: unless-stopped
 
   # ── Celery Worker (Async Scan Tasks) ────────────────────────────────
   worker:
@@ -61,21 +82,31 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: celery -A app.celery_app worker --loglevel=info
+    # Reuses the backend image, so it inherits the HTTP healthcheck, which a
+    # Celery process can never satisfy. Disable it rather than report unhealthy.
+    healthcheck:
+      disable: true
     environment:
       DATABASE_URL: postgresql://sentinel:sentinel@postgres:5432/sentinel
       REDIS_URL: redis://redis:6379/0
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - evidence_storage:/app/evidence_storage
+    restart: unless-stopped
 
   # ── OWASP ZAP (Sandboxed Scanner) ───────────────────────────────────
   zap:
     image: ghcr.io/zaproxy/zaproxy:stable
     command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true
-    ports:
-      - "8080:8080"
+    # No host port published: the backend reaches ZAP over the internal
+    # "sandbox" network. Publishing 8080 here only invited a clash with
+    # whatever already holds 8080 on the host (IIS, Docker, other tooling).
+    expose:
+      - "8080"
     networks:
       - sandbox
 

@@ -1,0 +1,23 @@
+# Keep the backend build context small and free of local state/secrets.
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/
+
+# Local database — the container uses Postgres (or its own SQLite volume).
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets and local env
+.env
+.env.*
+.jwt_secret
+
+# Runtime output
+evidence_storage/
+*.log

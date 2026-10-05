@@ -76,3 +76,62 @@ page presents a single form with no third-party identity provider.
 cd backend
 python -m pytest tests/ -q
 ```
+
+## Deployment (Docker)
+
+The whole stack runs with one command. You need Docker Desktop running.
+
+```sh
+docker compose up --build
+```
+
+That starts:
+
+| Service | URL | Notes |
+|---|---|---|
+| Frontend | <http://localhost:3002> | TanStack Start SSR, served by `server.mjs` |
+| Backend API | <http://localhost:8010> | FastAPI |
+| API docs | <http://localhost:8010/docs> | interactive OpenAPI |
+| Postgres | `localhost:5432` | container-internal network too |
+| Redis | `localhost:6379` | Celery broker |
+
+Sign in with `admin@sentinel.local` / `admin123`. The database starts empty, so
+seed it once after the stack is up:
+
+```sh
+docker compose exec backend python seed.py
+```
+
+### Set a JWT secret first
+
+The backend generates and persists its own signing key when none is supplied,
+which is fine for a single container. For anything shared, set one explicitly:
+
+```sh
+# .env next to docker-compose.yml
+JWT_SECRET=<output of: openssl rand -hex 32>
+```
+
+### Building the frontend image alone
+
+```sh
+docker build -t sentinel-frontend .
+docker run -p 3002:3000 sentinel-frontend
+```
+
+The image is multi-stage: the dev toolchain is not in the final layer. It
+serves a `/healthz` endpoint for orchestrator health checks.
+
+### How the frontend is served
+
+`vite build` emits a web-standard handler (`dist/server/server.js`) that
+exports `{ fetch }` and does not listen on a socket by itself. `server.mjs` is
+a small Node adapter that wraps it in a real HTTP server and serves the hashed
+static assets from `dist/client`.
+
+Run it directly without Docker:
+
+```sh
+npm run build
+npm start          # http://localhost:3000
+```
